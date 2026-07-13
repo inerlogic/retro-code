@@ -152,13 +152,17 @@ begin
 
   if PieceType = 1 then
   begin
+    { Update 2: fixed I-piece rotate needing to be pressed twice.
+      Horizontal reflects the piece's CURRENT orientation, so a
+      rotate press must build the OPPOSITE shape, not rebuild the
+      one it already has. }
     if Horizontal then
     begin
-      Temp[1,2] := 1; Temp[2,2] := 1; Temp[3,2] := 1; Temp[4,2] := 1;
+      Temp[2,1] := 1; Temp[2,2] := 1; Temp[2,3] := 1; Temp[2,4] := 1;
     end
     else
     begin
-      Temp[2,1] := 1; Temp[2,2] := 1; Temp[2,3] := 1; Temp[2,4] := 1;
+      Temp[1,2] := 1; Temp[2,2] := 1; Temp[3,2] := 1; Temp[4,2] := 1;
     end;
   end
   else
