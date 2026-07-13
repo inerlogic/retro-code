@@ -16,6 +16,14 @@ This started as a personal experiment after playing *Paper App DUNGEON* by [Glad
 
 Game ends either by death (HP reaches 0) or by voluntarily retiring with Q, either way followed by the scoreboard.
 
+## Screenshots
+
+![Dungeon floor, partial fog of war](screenshot-dungeon-floor.png)
+![Dungeon floor, fully revealed](screenshot-dungeon-floor-revealed.png)
+![Combat screen](screenshot-dungeon-combat.png)
+![Traveling merchant screen](screenshot-dungeon-merchant.png)
+![End summary / high score screen](screenshot-dungeon-summary.png)
+
 ## Known issues
 
 *(See the [repo root README](../../../../README.md) for why bugs are left documented here.)*

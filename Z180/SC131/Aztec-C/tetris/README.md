@@ -7,8 +7,18 @@ Timing loops were tuned on the SC131 — expect to re-tune the delay/speed const
 ## Versions
 
 - **TETRIS.C** — no stats panel, no speed scaling, fixed piece order (cycles 0–6). **Development order uncertain:** this may be an early/simple prototype that TETRIS2.C and TETRIS3.C built on, or it may actually be a later, deliberately simplified "final" build renamed to the plain `tetris.com` (so it runs as `tetris` rather than `tetris2`) after the added complexity in TETRIS2/3 (randomizer, stats, speed scaling) turned out not to be worth the buffer/timing headaches described below. Not confirmed either way — this CP/M setup doesn't keep file timestamps, so there's no straightforward record to check; about the only way to settle it would be recompiling from each `.C` source and comparing behavior/size against whatever `tetris.com` currently is, if it's ever worth the effort.
+
+  ![TETRIS.C gameplay](screenshot-tetris-gameplay.png)
+  ![TETRIS.C gameplay](screenshot-tetris-gameplay-2.png)
+  ![TETRIS.C game over](screenshot-tetris-gameover.png)
+
 - **TETRIS2.C** — adds a pseudo-random piece generator (`get_rnd`, an LFSR-style shift/xor), a piece-frequency stats panel, and speed that increases with score (`speed_limit` shrinks as score rises, floored at 1200).
+
+  ![TETRIS2.C gameplay with stats panel](screenshot-tetris2-gameplay-stats.png)
+
 - **TETRIS3.C** — rewrite of TETRIS2 targeting smaller/faster code (flat `char board[264]` array instead of 2D, `printf`-based drawing replaced with hand-rolled `print_str`/`print_num`/`put_c` helpers calling `bdos()` directly), but diffing the two shows it's also a **targeted attempt to fix TETRIS2.C's top-of-field bugs specifically**: it adds an `if (ny < 0) continue;` guard in `can_move()` (TETRIS2.C reads `board[ny][nx]` with no such guard, so a piece rotating or spawning above the top of the board causes an out-of-bounds array read — undefined behavior), a matching `if (ny >= 0 && ny <= 19)` guard in `draw_piece()` (TETRIS2.C calls `gotoxy()` unconditionally, so a piece partly above the board sends a malformed negative-row ANSI positioning sequence to the terminal), and an explicit `if (py == 0 || py == 1) game_over = 1;` check at lock time. Despite all three fixes targeting exactly this problem, it still doesn't end the game correctly (see Known Issues) — the underlying cause runs deeper than these three specific bugs.
+
+  ![TETRIS3.C gameplay with stats panel](screenshot-tetris3-gameplay-stats.png)
 
 ## Known issues
 
@@ -16,7 +26,9 @@ Timing loops were tuned on the SC131 — expect to re-tune the delay/speed const
 
 **Confirmed by playtesting (not just recollection):** TETRIS2.C does not end the game correctly when the stack reaches the top of the field — despite the code having the same spawn-position collision check as TETRIS.C (`if (!can_move(px, py)) game_over = 1;`), in practice the game hangs rather than ending, and pressing Q at that point does not quit either; the program just sits there with the cursor flashing. TETRIS2.C also has confirmed out-of-bounds behavior contributing to this: `can_move()` reads `board[ny][nx]` with no check for `ny < 0`, and `draw_piece()` calls `gotoxy()` unconditionally — so a piece rotating or spawning above the top of the board triggers an out-of-bounds array read and sends a malformed (negative-row) ANSI cursor-positioning sequence to the terminal.
 
-TETRIS3.C makes three targeted fixes for exactly this — bounds-checking both of those functions and adding an explicit `if (py == 0 || py == 1) game_over = 1;` check at lock time — confirming this was a genuine, deliberate attempt to fix TETRIS2.C's top-of-field problems, not just an unrelated rewrite that happened to also touch this area. **Despite all three fixes, TETRIS3.C still doesn't end the game correctly per testing.** Whatever's actually causing the hang runs deeper than the three specific bugs patched here — possibly a further Aztec-C/CP/M limitation (memory-related, or a `bdos()` console I/O timing/buffering issue — see below) rather than something fixable at the source level shown so far. This — combined with the stray-keypress issue below — is believed to be a real, significant reason development moved to Turbo Pascal, where TETRIS.PAS's equivalent top-of-field handling works correctly (see [`../../Turbo-Pascal-3/tetris/`](../../Turbo-Pascal-3/tetris/)).
+![TETRIS2.C hung at top of field](screenshot-tetris2-gameplay-hang.png)
+
+TETRIS3.C makes three targeted fixes for exactly this — bounds-checking both of those functions and adding an explicit `if (py == 0 || py == 1) game_over = 1;` check at lock time — confirming this was a genuine, deliberate attempt to fix TETRIS2.C's top-of-field problems, not just an unrelated rewrite that happened to also touch this area. **Despite all three fixes, TETRIS3.C still doesn't end the game correctly per testing.** Whatever's actually causing the hang runs deeper than the three specific bugs patched here — possibly a further Aztec-C/CP/M limitation (memory-related, or a `bdos()` console I/O timing/buffering issue — see below) rather than something fixable at the source level shown so far. This — combined with the stray-keypress issue below — is the reason development moved to Turbo Pascal, where TETRIS.PAS's equivalent top-of-field handling works correctly (see [`../../Turbo-Pascal-3/tetris/`](../../Turbo-Pascal-3/tetris/)).
 
 All three versions also share a stray-keypress bug: the input buffer is never cleared between pieces during play (only TETRIS2.C/TETRIS3.C drain it once, at the very end after game over — irrelevant to mid-game piece transitions). Since the "S" (drop) key works by forcing the delay loop to end immediately rather than consuming any queued extra keystrokes, pressing S more than once in quick succession (or holding it) leaves the extras sitting in the console input buffer — they then get read as soon as the next piece spawns, causing that piece to also instantly drop.
 
