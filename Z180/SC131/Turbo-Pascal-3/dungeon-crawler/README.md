@@ -20,4 +20,4 @@ Game ends either by death (HP reaches 0) or by voluntarily retiring with Q, eith
 
 *(See the [repo root README](../../../../README.md) for why bugs are left documented here.)*
 
-- **To Do:** the traveling merchant screen is displaying a stray `[F] Fight (Roll 1-6 Die)` prompt that makes no sense in a shop context. *(See the merchant screenshot.)
+- **Fixed (Update 3):** the traveling merchant screen was displaying a stray `[F] Fight (Roll 1-6 Die)` prompt that made no sense in a shop context. Root cause: `ProcessMerchant` is called immediately after combat resolves, with no `ClrScr` in between, and it never wrote to the screen row `ResolveMonsterCombat` uses for that prompt — so the leftover text from the fight just before it stayed on screen. Fixed by explicitly clearing that row in `ProcessMerchant`.
