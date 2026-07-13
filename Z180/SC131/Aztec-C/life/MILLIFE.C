@@ -1,3 +1,10 @@
+/*
+ * MILLIFE - 1D Game of Life screensaver
+ * Named in tribute to Jon Millen, author of "One-Dimensional
+ * Life," BYTE Magazine, Vol 3 No 12, December 1978 -- the
+ * five-cell YYXYY neighborhood rule this program implements.
+ * See jonmillen.com/1dlife
+ */
 char cell_a[84];
 char cell_b[84];
 unsigned int hash_hist[8];
