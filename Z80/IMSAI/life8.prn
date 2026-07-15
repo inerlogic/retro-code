@@ -1,0 +1,275 @@
+
+
+ 0100                   ORG     0100H
+                
+ 00FF =         OUTPORT EQU     0FFH            ; Programmed Output port -- confirm this
+ 00FF =         DELAY1  EQU     0FFH            ; innermost delay loop count -- TUNE ON HARDWARE
+ 00FF =         DELAY2  EQU     0FFH            ; middle delay loop count -- TUNE ON HARDWARE
+ 0004 =         DELAY3  EQU     004H            ; outer delay loop count -- TUNE ON HARDWARE
+                
+                ; ------------------------------------------------------------------
+                ; Entry point
+                ; ------------------------------------------------------------------
+ 0100 215E02    START:  LXI     H,SEED
+ 0103 7E                MOV     A,M
+ 0104 325F02            STA     SEEDCUR         ; keep a working copy of the current seed
+ 0107 CD3501            CALL    UNPACK          ; unpack SEEDCUR into CELLA[0..7]
+                
+                MAINLOOP:
+ 010A CD4901            CALL    PACK            ; A := packed byte from CELLA (cell0=bit0)
+ 010D 2F                CMA                     ; invert -- panel is active-low
+ 010E D3FF              OUT     OUTPORT
+ 0110 CD4702            CALL    DELAY
+                
+ 0113 CDC601            CALL    STEP            ; compute CELLB from CELLA (Millen's rule)
+ 0116 CD2802            CALL    CHECKDEAD       ; Z flag set if CELLB is all-zero
+ 0119 CA2801            JZ      RESEED
+ 011C CD3702            CALL    CHECKFULL       ; Z flag set if CELLB is all-one
+ 011F CA2801            JZ      RESEED
+                
+ 0122 CD1702            CALL    COPYBTOA        ; CELLA := CELLB
+ 0125 C30A01            JMP     MAINLOOP
+                
+ 0128 3A5F02    RESEED: LDA     SEEDCUR
+ 012B 07                RLC                     ; rotate seed so reseeds aren't identical
+ 012C 325F02            STA     SEEDCUR
+ 012F CD3501            CALL    UNPACK
+ 0132 C30A01            JMP     MAINLOOP
+                
+                ; ------------------------------------------------------------------
+                ; UNPACK -- explode SEEDCUR's bits into CELLA[0..7] (0 or 1 each).
+                ; cell0 = bit0 of SEEDCUR, ... cell7 = bit7.
+                ; Clobbers: A, B, C, H, L.
+                ; ------------------------------------------------------------------
+ 0135 216302    UNPACK: LXI     H,CELLA
+ 0138 3A5F02            LDA     SEEDCUR
+ 013B 0608              MVI     B,8
+ 013D 4F        UNPLP:  MOV     C,A             ; C = remaining bits still to process
+ 013E E601              ANI     01H             ; isolate current bit0
+ 0140 77                MOV     M,A             ; store 0 or 1 into CELLA[current]
+ 0141 23                INX     H
+ 0142 79                MOV     A,C
+ 0143 0F                RRC                     ; rotate right so next bit becomes bit0
+ 0144 05                DCR     B
+ 0145 C23D01            JNZ     UNPLP
+ 0148 C9                RET
+                
+ 0149 216A02    PACK:   LXI     H,CELLA+7       ; start at the highest index
+ 014C 0608              MVI     B,8
+ 014E AF                XRA     A               ; running result := 0
+ 014F 87        PAKLP:  ADD     A               ; shift left, zero-fill bit0 (A := A+A)
+ 0150 B6                ORA     M               ; OR in CELLA[current] (always 0 or 1)
+ 0151 2B                DCX     H               ; move to next-lower index
+ 0152 05                DCR     B
+ 0153 C24F01            JNZ     PAKLP
+ 0156 C9                RET
+                
+                GETCELLA:
+ 0157 C5                PUSH    B
+ 0158 47                MOV     B,A
+ 0159 216302            LXI     H,CELLA
+ 015C 78        GCLOOP: MOV     A,B
+ 015D B7                ORA     A
+ 015E CA6601            JZ      GCDONE
+ 0161 23                INX     H
+ 0162 05                DCR     B
+ 0163 C35C01            JMP     GCLOOP
+ 0166 7E        GCDONE: MOV     A,M
+ 0167 C1                POP     B
+ 0168 C9                RET
+                
+                
+                SETCELLB:
+ 0169 C5                PUSH    B
+ 016A 47                MOV     B,A
+ 016B 216B02            LXI     H,CELLB
+                SETLOOP:
+ 016E 78                MOV     A,B
+ 016F B7                ORA     A
+ 0170 CA7801            JZ      SETDONE
+ 0173 23                INX     H
+ 0174 05                DCR     B
+ 0175 C36E01            JMP     SETLOOP
+                SETDONE:
+ 0178 79                MOV     A,C
+ 0179 77                MOV     M,A
+ 017A C1                POP     B
+ 017B C9                RET
+                
+                
+ 017C FE00      WRAP8:  CPI     0
+ 017E F28301            JP      W8A
+ 0181 C608              ADI     8
+ 0183 FE08      W8A:    CPI     8
+ 0185 FA8A01            JM      W8DONE
+ 0188 D608              SUI     8
+ 018A C9        W8DONE: RET
+                
+                
+                NEIGHSUM:
+ 018B 326002            STA     NSI
+ 018E 0E00              MVI     C,0
+                
+ 0190 3A6002            LDA     NSI
+ 0193 D602              SUI     2
+ 0195 CD7C01            CALL    WRAP8
+ 0198 CD5701            CALL    GETCELLA
+ 019B 81                ADD     C
+ 019C 4F                MOV     C,A
+                
+ 019D 3A6002            LDA     NSI
+ 01A0 D601              SUI     1
+ 01A2 CD7C01            CALL    WRAP8
+ 01A5 CD5701            CALL    GETCELLA
+ 01A8 81                ADD     C
+ 01A9 4F                MOV     C,A
+                
+ 01AA 3A6002            LDA     NSI
+ 01AD C601              ADI     1
+ 01AF CD7C01            CALL    WRAP8
+ 01B2 CD5701            CALL    GETCELLA
+ 01B5 81                ADD     C
+ 01B6 4F                MOV     C,A
+                
+ 01B7 3A6002            LDA     NSI
+ 01BA C602              ADI     2
+ 01BC CD7C01            CALL    WRAP8
+ 01BF CD5701            CALL    GETCELLA
+ 01C2 81                ADD     C
+ 01C3 4F                MOV     C,A
+                
+ 01C4 79                MOV     A,C
+ 01C5 C9                RET
+                
+                
+ 01C6 AF        STEP:   XRA     A
+ 01C7 326102            STA     SI              ; SI := 0
+ 01CA 3A6102    STEPLP: LDA     SI
+ 01CD CD8B01            CALL    NEIGHSUM        ; A := neighbor sum for cell SI
+ 01D0 326202            STA     SUM
+                
+ 01D3 3A6102            LDA     SI
+ 01D6 CD5701            CALL    GETCELLA        ; A := CELLA[SI]  (0 or 1)
+ 01D9 B7                ORA     A
+ 01DA C2ED01            JNZ     STALIVE
+                
+                        ; currently dead
+ 01DD 3A6202            LDA     SUM
+ 01E0 FE02              CPI     2
+ 01E2 CAFD01            JZ      SETALIVE
+ 01E5 FE03              CPI     3
+ 01E7 CAFD01            JZ      SETALIVE
+ 01EA C30202            JMP     SETDEAD
+                
+                STALIVE:
+ 01ED 3A6202            LDA     SUM
+ 01F0 FE02              CPI     2
+ 01F2 CAFD01            JZ      SETALIVE
+ 01F5 FE04              CPI     4
+ 01F7 CAFD01            JZ      SETALIVE
+ 01FA C30202            JMP     SETDEAD
+                
+                SETALIVE:
+ 01FD 0E01              MVI     C,1
+ 01FF C30402            JMP     STSTORE
+                SETDEAD:
+ 0202 0E00              MVI     C,0
+                
+                STSTORE:
+ 0204 3A6102            LDA     SI
+ 0207 CD6901            CALL    SETCELLB        ; CELLB[SI] := C
+                
+ 020A 3A6102            LDA     SI
+ 020D 3C                INR     A
+ 020E 326102            STA     SI
+ 0211 FE08              CPI     8
+ 0213 C2CA01            JNZ     STEPLP
+ 0216 C9                RET
+                
+                ; ------------------------------------------------------------------
+                ; COPYBTOA -- CELLA[0..7] := CELLB[0..7]
+                ; ------------------------------------------------------------------
+                COPYBTOA:
+ 0217 216B02            LXI     H,CELLB
+ 021A 116302            LXI     D,CELLA
+ 021D 0608              MVI     B,8
+ 021F 7E        CBALP:  MOV     A,M
+ 0220 12                STAX    D
+ 0221 23                INX     H
+ 0222 13                INX     D
+ 0223 05                DCR     B
+ 0224 C21F02            JNZ     CBALP
+ 0227 C9                RET
+                
+                ; ------------------------------------------------------------------
+                ; CHECKDEAD -- Z flag set on return if CELLB is all zero
+                ; ------------------------------------------------------------------
+                CHECKDEAD:
+ 0228 216B02            LXI     H,CELLB
+ 022B 0608              MVI     B,8
+ 022D 7E        CDLP:   MOV     A,M
+ 022E B7                ORA     A
+ 022F C0                RNZ                     ; found a live cell -- return with Z clear
+ 0230 23                INX     H
+ 0231 05                DCR     B
+ 0232 C22D02            JNZ     CDLP
+ 0235 AF                XRA     A               ; force Z flag set (A=0)
+ 0236 C9                RET
+                
+                ; ------------------------------------------------------------------
+                ; CHECKFULL -- Z flag set on return if CELLB is all one
+                ; ------------------------------------------------------------------
+                CHECKFULL:
+ 0237 216B02            LXI     H,CELLB
+ 023A 0608              MVI     B,8
+ 023C 7E        CFLP:   MOV     A,M
+ 023D FE01              CPI     1
+ 023F C0                RNZ                     ; found a dead cell -- return with Z clear
+ 0240 23                INX     H
+ 0241 05                DCR     B
+ 0242 C23C02            JNZ     CFLP
+ 0245 AF                XRA     A               ; force Z flag set
+ 0246 C9                RET
+                
+                ; ------------------------------------------------------------------
+                ; DELAY -- triple-nested delay loop (DELAY3 * DELAY2 * DELAY1 total
+                ; inner iterations), tune all three constants on real hardware. Three
+                ; tiers instead of two gives a much wider tunable range without
+                ; needing anything bigger than 8-bit counters.
+                ; ------------------------------------------------------------------
+ 0247 C5        DELAY:  PUSH    B
+ 0248 D5                PUSH    D
+ 0249 1604              MVI     D,DELAY3
+                DLYOUT3:
+ 024B 06FF              MVI     B,DELAY2
+ 024D 0EFF      DLYOUT: MVI     C,DELAY1
+ 024F 0D        DLYIN:  DCR     C
+ 0250 C24F02            JNZ     DLYIN
+ 0253 05                DCR     B
+ 0254 C24D02            JNZ     DLYOUT
+ 0257 15                DCR     D
+ 0258 C24B02            JNZ     DLYOUT3
+ 025B D1                POP     D
+ 025C C1                POP     B
+ 025D C9                RET
+                
+                ; ------------------------------------------------------------------
+                ; Data
+                ; ------------------------------------------------------------------
+ 025E 1B        SEED:       DB      00011011B   ; = 27 decimal. Settles (like every possible
+                                                 ; seed does, in ~2 gens -- an 8-cell ring is
+                                                 ; just too small for a longer transient) into
+                                                 ; a 5-generation cycle instead of the default
+                                                 ; original seed's boring 2-generation one --
+                                                 ; found by simulating all 256 possible seeds.
+                                                 ; Change freely; see IMSAI/README.md for the
+                                                 ; full cycle-length distribution across seeds.
+ 025F 00        SEEDCUR:    DB      0
+ 0260 00        NSI:        DB      0           ; NEIGHSUM's index scratch
+ 0261 00        SI:         DB      0           ; STEP's loop index
+ 0262 00        SUM:        DB      0           ; STEP's computed neighbor sum
+ 0263           CELLA:      DS      8
+ 026B           CELLB:      DS      8
+                
+ 0273                   END     START
+

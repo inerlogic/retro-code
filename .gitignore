@@ -1,18 +1,3 @@
-# Aztec-C / CP/M build artifacts
-*.asm
-*.o
-*.bak
-*.com
-*.rel
-*.sym
-*.lst
-*.prn
-*.hex
-
-# Turbo Pascal
-*.TPU
-*.TPL
-
 # OS cruft
 .DS_Store
 Thumbs.db
