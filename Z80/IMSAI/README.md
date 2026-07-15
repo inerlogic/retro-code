@@ -1,6 +1,6 @@
 # The High Nibble IMSAI 8080 Clone
 
-*(The High Nibble IMSAI 8080 Clone is an ESP32-based emulator of the IMSAI 8080 — not physical period hardware. It's configured to emulate a Z80 at 4MHz (rather than a real 8080 — the emulated clock speed is itself a configurable setting, not a fixed physical crystal, so this could change if reconfigured later. Even "IMSAI Guy" got rid of his real one, so this is probably how most people encounter this machine if at all.)*
+*(The High Nibble IMSAI 8080 Clone is an ESP32-based emulator of the IMSAI 8080 — not physical period hardware. I have mine configured to emulate a Z80 at 4MHz (rather than a real 8080 — the emulated clock speed is itself a configurable setting, not a fixed physical crystal, so this could change if reconfigured later. Even "IMSAI Guy" got rid of his real one, so this is probably how most people encounter this machine if at all.)*
 
 - [LIFE8.ASM](LIFE8.ASM) — 1D Game of Life on the front panel, 8-cell ring
 - [LIFE8.PRN](LIFE8.PRN) — assembler listing for LIFE8.ASM (addresses + opcode bytes + source, side by side) — the reference to use if you ever want to toggle this in by hand like a sick person.
