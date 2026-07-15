@@ -1,6 +1,7 @@
 # BASIC-80 (MBASIC, CP/M)
 
-These are plain-text MBASIC listings — not tokenized binaries. MBASIC's `LOAD` auto-detects the format, so a plain-text `.BAS` loads and runs identically to a tokenized one; the only trade-off is a slightly larger file and a hair slower load, in exchange for being directly readable here on GitHub and needing no detokenizer.
+These are plain-text MBASIC listings — not tokenized binaries. 
+MBASIC's `LOAD` auto-detects the format, so a plain-text `.BAS` loads and runs identically to a tokenized one; the only trade-off is a slightly larger file and a hair slower load, in exchange for being directly readable here on GitHub and not needing a detokenizationer.
 
 ## Files
 
@@ -20,7 +21,11 @@ These are plain-text MBASIC listings — not tokenized binaries. MBASIC's `LOAD`
 
   ![AUTOLIF.BAS running](screenshot-autolif-running.png)
 
-  Tried to catch a screenshot of the re-seed ("COLONY DIED OUT!") message with seed **23432** — it ran 485 generations without dying out before being stopped manually, settling into what looked like a stable/oscillating pattern rather than heading toward extinction.
+  Tried to catch a screenshot of the re-seed ("COLONY DIED OUT!") message with seed **23432** — it ran 485 generations without dying out before being stopped manually, settling into what looked like a stable/oscillating pattern rather than heading toward extinction. Re-ran the same seed again later — passed generation 526 with still no sign of dying out, further confirming this seed lands in a genuinely stable/long-lived configuration rather than the first run just being a fluke.
+
+  **Resolved:** left seed 23432 running with Tera Term's scroll buffer capturing everything, and it settled permanently at **generation 788/789** — passing through a few symmetric diamond-shaped transient formations along the way, a fairly typical-looking Life collapse pattern, before locking into a mix of genuinely famous, named Conway's Life patterns: **Block**, **Loaf**, and **Beehive** (three of the five most common still lifes in existence) plus a **Traffic Light** (the classic four-blinker oscillator, confirmed via its documented "+"/box alternating phases) providing the only ongoing motion. From generation 789 onward it just repeats that same period-2 cycle forever.
+
+  ![Seed 23432 settled state](seed-23432-stable.png)
 
 - **LIFE.BAS** — the classic 2D Conway's Game of Life from *Creative Computing, Morristown, NJ*, with user-entered starting patterns and a bounding-box optimization so it only scans the region that's actually populated.
 

@@ -27,6 +27,10 @@ Some tools target a firmware layer rather than one specific machine, so they liv
 
 - [RomWBW-HBIOS](RomWBW-HBIOS/) — tools that talk directly to RomWBW's HBIOS layer and should run on any RomWBW-based board (SC131, and RetroBrew-SBC/RC2014 once back in use)
 
+## Development tools (modern, not retro)
+
+- [tools/](tools/) — modern Python scripts used to help develop the retro code above (e.g. simulating a cellular automaton rule to pick good seed values before testing on real hardware) — not retro code themselves, so kept separate from everything above.
+
 ## Structure
 
 ```
@@ -39,4 +43,4 @@ Each project folder has its own README with build/run notes where known. See [do
 
 I learned C on ANSI-C in the mid-1990s. Aztec-C for CP/M, decades later, is a middle-age distraction — and it shows. Some of the Aztec-C programs in here (see the Tetris folder under [Z180/SC131/Aztec-C](Z180/SC131/Aztec-C/) especially) have real, confirmed bugs that I never fully solved — things like a top-of-field detection bug that survived two attempted fixes. I'm leaving those versions in rather than cleaning them up or deleting them.
 
-Partly that's just honesty about how the development actually went — struggling with a platform is normal, not something to hide. But it's also an open invitation: if you know Aztec-C/CP/M better than I do and want a fun, bounded debugging exercise, digging into why TETRIS3.C still hangs at the top of the field despite three targeted fixes is a genuinely interesting little puzzle. Pull requests, or just an email telling me what you found, are equally welcome.
+Partly that's just honesty about how the development actually went — struggling with a platform is normal, not something to hide. But it's also an open invitation: if you know Aztec-C|CP/M better than I do and want a fun, bounded debugging exercise, digging into why TETRIS3.C still hangs at the top of the field despite three targeted fixes is a genuinely interesting little puzzle. Pull requests, or just an email telling me what you found, are equally welcome.
