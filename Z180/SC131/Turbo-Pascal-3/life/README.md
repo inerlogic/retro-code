@@ -1,6 +1,6 @@
 # Game of Life screensaver (Turbo Pascal 3, color)
 
-**MILLIFE.PAS** is a Pascal port of the Aztec-C `MILLIFE.C`/`MILLIF2.C` 1D cellular automaton (see [`../../../Aztec-C/life/`](../../../Aztec-C/life/)) — same 4-neighbor-sum rule and loop detection (an 8-generation checksum history that triggers a re-seed if a checksum repeats), but each live cell also carries a color (an ANSI background color code 41–47) that blends from its neighbors' colors as generations evolve, instead of the plain `*`/space display of the C version. Uses the same LFSR-based `GetRnd` as the C original for its initial seeding.
+**MILLIFE.PAS** is a Pascal port of the Aztec-C `MILLIFE.C`/`MILLIF2.C` 1D cellular automaton (see [`../../Aztec-C/life/`](../../Aztec-C/life/)) — same 4-neighbor-sum rule and loop detection (an 8-generation checksum history that triggers a re-seed if a checksum repeats), but each live cell also carries a color (an ANSI background color code 41–47) that blends from its neighbors' colors as generations evolve, instead of the plain `*`/space display of the C version. Uses the same LFSR-based `GetRnd` as the C original for its initial seeding.
 
 Named in tribute to **Jon Millen**, author of "One-Dimensional Life" in BYTE Magazine, Vol 3 No 12, December 1978 — the five-cell YYXYY neighborhood rule this program implements. See [jonmillen.com/1dlife](https://jonmillen.com/1dlife).
 

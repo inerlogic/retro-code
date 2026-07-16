@@ -1,6 +1,6 @@
 # Tetris (Turbo Pascal 3)
 
-Pascal counterparts to the Aztec-C Tetris versions (see [`../../../Aztec-C/tetris/`](../../../Aztec-C/tetris/)), same A/D/W/S/Q controls.
+Pascal counterparts to the Aztec-C Tetris versions (see [`../../Aztec-C/tetris/`](../../Aztec-C/tetris/)), same A/D/W/S/Q controls.
 
 - **TETRIS.PAS** — the main version: ANSI color per piece type, a persisted high-score table (`SCORES.DAT`), and a short "lock delay" — a couple of frames of grace after a piece touches down before it locks, tuned for the SC131's clock speed, so a last-moment slide or rotate still counts.
 

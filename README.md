@@ -40,7 +40,7 @@ Some tools target a firmware layer rather than one specific machine, so they liv
 
 ## Development tools (modern, not retro)
 
-- [tools/](tools/) — modern Python scripts used to help develop the retro code above (e.g. simulating a cellular automaton rule to pick good seed values before testing on real hardware) — not retro code themselves, so kept separate from everything above.
+- [Tools/](Tools/) — modern Python scripts used to help develop the retro code above (e.g. simulating a cellular automaton rule to pick good seed values before testing on real hardware) — not retro code themselves, so kept separate from everything above.
 
 ## Structure
 

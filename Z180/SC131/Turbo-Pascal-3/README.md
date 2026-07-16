@@ -1,14 +1,14 @@
 # Game of Life screensaver (Turbo Pascal 3, color)
 
-**MILLIFE.PAS** is a Pascal port of the Aztec-C `MILLIFE.C`/`MILLIF2.C` 1D cellular automaton (see [`../../../Aztec-C/life/`](../../../Aztec-C/life/)) — same 4-neighbor-sum rule and loop detection (an 8-generation checksum history that triggers a re-seed if a checksum repeats), but each live cell also carries a color (an ANSI background color code 41–47) that blends from its neighbors' colors as generations evolve, instead of the plain `*`/space display of the C version. Uses the same LFSR-based `GetRnd` as the C original for its initial seeding.
+**MILLIFE.PAS** is a Pascal port of the Aztec-C `MILLIFE.C`/`MILLIF2.C` 1D cellular automaton (see [`../Aztec-C/life/`](../Aztec-C/life/)) — same 4-neighbor-sum rule and loop detection (an 8-generation checksum history that triggers a re-seed if a checksum repeats), but each live cell also carries a color (an ANSI background color code 41–47) that blends from its neighbors' colors as generations evolve, instead of the plain `*`/space display of the C version. Uses the same LFSR-based `GetRnd` as the C original for its initial seeding.
 
 Named in tribute to **Jon Millen**, author of "One-Dimensional Life" in BYTE Magazine, Vol 3 No 12, December 1978 — the five-cell YYXYY neighborhood rule this program implements. See [jonmillen.com/1dlife](https://jonmillen.com/1dlife).
 
-![MILLIFE.PAS running, mid-reset](screenshot-millife-pas-running-reset.png)
+![MILLIFE.PAS running, mid-reset](life/screenshot-millife-pas-running-reset.png)
 
 ## HEXLIFE.PAS
 
-A different kind of Life screensaver, born out of watching `AUTOLIF.BAS` (see [`../../BASIC-80/`](../../BASIC-80/)) settle permanently at generation 788 (seed 23432) and just sit there forever afterward, once its identical two phases were confirmed byte-for-byte via diff. This version exists specifically so that doesn't happen.
+A different kind of Life screensaver, born out of watching `AUTOLIF.BAS` (see [`../BASIC-80/`](../BASIC-80/)) settle permanently at generation 788 (seed 23432) and just sit there forever afterward, once its identical two phases were confirmed byte-for-byte via diff. This version exists specifically so that doesn't happen.
 
 - **Classic 2D Conway's Life** (8-neighbor sum, same rule as `AUTOLIF.BAS`/`LIFE.BAS`), not Millen's 1D rule — what's borrowed from the 1D life programs is the *technique*, not the rule.
 - **Fully toroidal** — wraps all four sides (a "ball" rather than a cylinder or a bounded dead-border grid like `AUTOLIF.BAS` uses).
