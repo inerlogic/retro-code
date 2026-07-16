@@ -1,3 +1,13 @@
+```
+/******************************************************************
+ * File Name:    README.md
+ * Description:  Core execution logic for the multiverse.
+ * Author:       git blame
+ * Date:         see: git log
+ * Compiler:     Yes.
+ ******************************************************************/
+```
+
 # Retro Code
 
 Source code for games and utilities written for my retro computers, organized by processor, then by machine, then by language.

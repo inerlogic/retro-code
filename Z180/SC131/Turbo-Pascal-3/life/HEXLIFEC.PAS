@@ -166,7 +166,7 @@ begin
         this specific machine that needs reasonably frequent polling to
         catch an incoming byte before it's lost) -- but this fix is
         confirmed via isolated test stubs, independent of any display
-        logic. See TP3-life/README.md for the full debugging story. }
+        logic. See Turbo-Pascal-3/life/README.md for the full debugging story. }
       CellCounter := CellCounter + 1;
       if CellCounter >= 200 then
       begin

@@ -176,7 +176,7 @@ begin
         this specific machine that needs reasonably frequent polling to
         catch an incoming byte before it's lost) -- but this fix is
         confirmed via isolated test stubs, independent of any display
-        logic. See TP3-life/README.md for the full debugging story. }
+        logic. See Turbo-Pascal-3/life/README.md for the full debugging story. }
       CellCounter := CellCounter + 1;
       if CellCounter >= 200 then
       begin
@@ -229,10 +229,11 @@ begin
 end;
 
 { Draws the static border + "Seed:/Generation:/Checksum:" labels (and
-  the seed number itself, which -- unlike generation/checksum -- doesn't
-  change during a run, so it's drawn here once rather than in the
-  per-generation update). Called once at startup and once per reseed --
-  never during normal per-generation steps. }
+  the seed number itself). The seed number does change across a reseed
+  (rotate-and-increment, see LoopDetected handling above) but not during
+  the generations between reseeds, so redrawing it here once per reseed,
+  rather than every generation, is still correct. Called once at startup
+  and once per reseed -- never during normal per-generation steps. }
 procedure DrawChrome;
 var
   Y: Integer;
@@ -394,6 +395,13 @@ begin
       LastChecksum := ComputeChecksum;
       if LoopDetected(LastChecksum) then
       begin
+        { Backported from HEXLIFE.PAS/HEXLIFEC.PAS: rotate-and-increment the
+          seed so the displayed value actually changes on reseed, instead
+          of staying frozen at the original startup number while the grid
+          itself silently moves on underneath it. }
+        SeedVal := ((SeedVal shl 1) or (SeedVal shr 14)) + 1;
+        RandSeed := SeedVal;
+
         { Silent reseed -- no message }
         ClrScr;
         SeedGrid;
