@@ -19,6 +19,7 @@ Source code for games and utilities written for my retro computers, organized by
 | Z180 | [SC131](Z180/SC131/) | Pocket computer, used via Tera Term (ANSI/VT100) |
 | Z80 | [RetroBrew-SBC](Z80/RetroBrew-SBC/) | Z80 SBC + PROP/IO board (SD card access), formerly known as N8VEM |
 | Z80 | [IMSAI](Z80/IMSAI/) | The High Nibble IMSAI 8080 clone |
+| 80386 | [Pocket-386](80386/Pocket386/) | Pocket 386 mini-Laptop |
 
 ## Other machines (not currently active)
 
