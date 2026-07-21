@@ -1,12 +1,16 @@
-program HexLifeLog386;
+program HexLifeLog386T;
 uses Crt;
 
-{ OPTIMIZED VERSION -- speed-optimized sibling to HL386_Brent.pas 
-  which usually skips most of the replay by starting from a previous 
-  checkpoint instead, when provably safe to -- see the FindMu comment 
-  for the full reasoning and validation. Both files are otherwise identical.
+{ TICK-TRACKING VERSION -- sibling to HL386.pas (same previous-checkpoint
+  shortcut in FindMu) and HL386_Brent.pas (same underlying algorithm),
+  but MuSeconds is a real measurement here, not a proportional estimate.
+  CycleCandidate additionally preserves the real elapsed-tick count
+  alongside each checkpoint's state, and FindMu accumulates real ticks
+  during its own replay -- starting from the preserved checkpoint's tick
+  count when the shortcut is used, or from zero when replaying from
+  generation 0. See FindMu's comment for the full reasoning.
 
-  Version history for both files lives in this folder's README. }
+  Version history for all three files lives in this folder's README. }
 
 { 244x38 grid (9,272 cells) in VGA's 80x50 text mode (8x8 font), centered
   with margin on all sides, plus a status line on row 1 (Seed/Generation/
@@ -35,21 +39,20 @@ uses Crt;
   before being accepted. That verification is what actually eliminates
   false positives, rather than just making them less likely.
 
-  CSV logs elapsed SECONDS via the BIOS timer-tick counter at 0040:006C,
+  Elapsed time is tracked via the BIOS timer-tick counter at 0040:006C,
   not a wall-clock timestamp, accumulated incrementally once per
   generation so it stays correct even across multiple midnight
-  rollovers -- see AccumulateElapsedTicks/TicksToSeconds below for why
+  rollovers -- see AccumulateTicksInto/TicksToSeconds below for why
   (short version: this machine's RTC isn't trustworthy).
 
-  CSV format is Seed,Mu,EstimatedMuSeconds,Period. Phase-1 detection
-  alone only tells you WHEN a cycle was confirmed, which overshoots the
-  TRUE convergence point (mu) by an amount that depends on checkpoint-
-  schedule luck, not on the pattern. FindMu (Brent's standard second
-  phase, below) recovers the true mu exactly. Period is exact (Lam-1 at
-  match time); EstimatedMuSeconds is a proportional ESTIMATE scaled from
-  the real measured detection-time, not a direct timing, since FindMu's
-  replay happens after the fact at a different real-world moment -- see
-  the logging block's comment for the full reasoning. }
+  CSV format is Seed,Mu,MuSeconds,Period. Phase-1 detection alone only
+  tells you WHEN a cycle was confirmed, which overshoots the TRUE
+  convergence point (mu) by an amount that depends on checkpoint-schedule
+  luck, not on the pattern. FindMu (Brent's standard second phase, below)
+  recovers the true mu exactly. Period is exact (Lam-1 at match time);
+  MuSeconds is a real measurement, accumulated during FindMu's own
+  replay rather than derived from the original detection run's timing --
+  see FindMu's comment for the full reasoning. }
 
 const
   { GRIDW/GRIDH: Sized to ~9,000-10,000 cells (erring smaller), proportioned to the
@@ -110,14 +113,15 @@ var
                                was taken at }
   PrevCheckpointGen: LongInt; { generation PrevSnapshot was taken at -- 0
                                 means "no previous checkpoint yet this seed" }
+  TortoiseTicks: LongInt;      { ElapsedTicksAccum at the moment the CURRENT
+                                 checkpoint (Snapshot) was taken }
+  PrevCheckpointTicks: LongInt; { ElapsedTicksAccum at the moment PrevSnapshot
+                                  was taken -- real anchor for FindMu's own
+                                  tick accumulation when the shortcut is used }
   FoundPeriod: LongInt;      { true period, extracted as Lam-1 at match time }
   Mu: LongInt;               { true convergence generation, from FindMu }
-  DetectionGen: LongInt;     { Gen at the moment phase 1 detected a match }
-  DetectionSeconds: LongInt; { real measured seconds at DetectionGen }
-  EstimatedMuSeconds: LongInt; { proportionally-scaled estimate of real
-                                 seconds at Mu -- see the logging block's
-                                 comment for why this is an estimate, not
-                                 a direct measurement }
+  MuTicksResult: LongInt;    { real elapsed ticks at generation Mu, from FindMu }
+  MuSeconds: LongInt;        { MuTicksResult converted to seconds }
 
 function GetRnd: Integer;
 begin
@@ -254,9 +258,11 @@ begin
   if Lam = Power then
   begin
     PrevCheckpointGen := TortoiseGen;
+    PrevCheckpointTicks := TortoiseTicks;
     CopyGrid(Snapshot, PrevSnapshot);
     TortoiseChecksum := Checksum;
     TortoiseGen := CallCounter;
+    TortoiseTicks := ElapsedTicksAccum;
     CopyGrid(CellB, Snapshot);
     Power := Power * 2;
     Lam := 0;
@@ -267,6 +273,49 @@ end;
 procedure CopyBToA;
 begin
   CopyGrid(CellB, CellA);
+end;
+
+{ Elapsed time via the BIOS timer-tick counter at 0040:006C, NOT the
+  RTC/calendar clock (GetTime/GetDate) -- this machine's CMOS clock isn't
+  trustworthy, so any wall-clock reading would just be recording
+  nonsense. The BIOS tick counter is different: it's incremented by the
+  motherboard's timer chip firing an interrupt about 18.2065 times a
+  second, entirely independent of the CMOS battery, so it stays accurate
+  for measuring elapsed durations even when the calendar date is garbage.
+
+  Ticks are ACCUMULATED incrementally, once per generation, rather than
+  measured as a single before/after subtraction at the start and end of
+  a seed's run. This is what makes it correct for a seed that takes
+  several days to converge, not just one that crosses a single midnight:
+  since the check below runs once a generation -- far more often than
+  once every 24 hours -- it's not possible to miss a rollover, no matter
+  how many midnights a single seed's run happens to span.
+
+  Parameterized (TicksAccum/PriorSample passed in rather than assuming
+  the global ElapsedTicksAccum/PriorTickSample) so FindMu, below, can
+  keep its own separate, real tick count during its replay -- using this
+  same accumulation logic, but starting from a real historical anchor
+  (PrevCheckpointTicks) when the shortcut is used, rather than either
+  restarting from zero or reusing the main loop's own in-progress state. }
+const
+  SECONDS_PER_TICK = 65536.0 / 1193182.0;
+  TICKS_PER_DAY = 1573040;
+
+procedure AccumulateTicksInto(var TicksAccum: LongInt; var PriorSample: LongInt);
+var
+  NowTicks: LongInt;
+begin
+  NowTicks := MemL[$0040:$006C];
+  if NowTicks < PriorSample then
+    TicksAccum := TicksAccum + (NowTicks + TICKS_PER_DAY - PriorSample)
+  else
+    TicksAccum := TicksAccum + (NowTicks - PriorSample);
+  PriorSample := NowTicks;
+end;
+
+procedure AccumulateElapsedTicks;
+begin
+  AccumulateTicksInto(ElapsedTicksAccum, PriorTickSample);
 end;
 
 { Distinct from DrawStatus on purpose -- reusing DrawStatus here would
@@ -305,6 +354,18 @@ end;
   generations counted in THIS phase is mu, the true convergence generation, 
   exactly (not an estimate).
 
+  MuTicks (var parameter) is a REAL measurement, not an estimate: real
+  elapsed ticks are accumulated locally, once per replay step, using the
+  same AccumulateTicksInto logic the main loop uses for ElapsedTicksAccum
+  -- just with its own local accumulator and prior-sample variables, so
+  it doesn't interfere with the main loop's own tracking (which is about
+  to be reset for the next seed regardless). When the shortcut below is
+  used, MuTicks starts from PrevCheckpointTicks -- the real tick count
+  CycleCandidate captured at that checkpoint, back when it actually
+  happened -- rather than from zero, so the final value reflects real
+  elapsed time across the WHOLE run from generation 0 to Mu, not just
+  the portion replayed just now.
+
   SHORTCUT, checked first: rather than always starting both pointers from
   the seed's true generation-0 grid, this tries starting from the
   PREVIOUS checkpoint (PrevSnapshot/PrevCheckpointGen, preserved by
@@ -337,13 +398,15 @@ end;
   detecting convergence and moving to the next seed), and the outer loop
   reseeds CellA fresh for the next seed regardless of what this leaves
   behind in it. }
-function FindMu(FoundPeriod: LongInt): LongInt;
+function FindMu(FoundPeriod: LongInt; var MuTicks: LongInt): LongInt;
 var
   I: LongInt;
   Mu: LongInt;
   StartGen: LongInt;
+  MuPriorTick: LongInt;
 begin
   StartGen := 0;
+  MuTicks := 0;
 
   if PrevCheckpointGen > 0 then
   begin
@@ -354,8 +417,13 @@ begin
       CopyGrid(CellB, CellA);
     end;
     if not StatesMatch(CellA, PrevSnapshot) then
+    begin
       StartGen := PrevCheckpointGen;
+      MuTicks := PrevCheckpointTicks;
+    end;
   end;
+
+  MuPriorTick := MemL[$0040:$006C];
 
   if StartGen = 0 then
   begin
@@ -376,6 +444,7 @@ begin
     if not KeepRunning then Break;
     StepGrid(CellB, Snapshot);
     CopyGrid(Snapshot, CellB);
+    AccumulateTicksInto(MuTicks, MuPriorTick);
     if (I mod 10) = 0 then DrawMuProgress(I);
   end;
 
@@ -388,6 +457,7 @@ begin
     StepGrid(CellB, Snapshot);
     CopyGrid(TortoiseScratch, CellA);
     CopyGrid(Snapshot, CellB);
+    AccumulateTicksInto(MuTicks, MuPriorTick);
     Mu := Mu + 1;
     if (Mu mod 10) = 0 then DrawMuProgress(Mu);
   end;
@@ -461,37 +531,6 @@ begin
   TextColor(7);
 end;
 
-{ Elapsed time via the BIOS timer-tick counter at 0040:006C, NOT the
-  RTC/calendar clock (GetTime/GetDate) -- this machine's CMOS clock isn't
-  trustworthy, so any wall-clock reading would just be recording
-  nonsense. The BIOS tick counter is different: it's incremented by the
-  motherboard's timer chip firing an interrupt about 18.2065 times a
-  second, entirely independent of the CMOS battery, so it stays accurate
-  for measuring elapsed durations even when the calendar date is garbage.
-
-  Ticks are ACCUMULATED incrementally, once per generation, rather than
-  measured as a single before/after subtraction at the start and end of
-  a seed's run. This is what makes it correct for a seed that takes
-  several days to converge, not just one that crosses a single midnight:
-  since the check below runs once a generation -- far more often than
-  once every 24 hours -- it's not possible to miss a rollover, no matter
-  how many midnights a single seed's run happens to span. }
-const
-  SECONDS_PER_TICK = 65536.0 / 1193182.0;
-  TICKS_PER_DAY = 1573040;
-
-procedure AccumulateElapsedTicks;
-var
-  NowTicks: LongInt;
-begin
-  NowTicks := MemL[$0040:$006C];
-  if NowTicks < PriorTickSample then
-    ElapsedTicksAccum := ElapsedTicksAccum + (NowTicks + TICKS_PER_DAY - PriorTickSample)
-  else
-    ElapsedTicksAccum := ElapsedTicksAccum + (NowTicks - PriorTickSample);
-  PriorTickSample := NowTicks;
-end;
-
 function TicksToSeconds(Ticks: LongInt): LongInt;
 begin
   TicksToSeconds := Round(Ticks * SECONDS_PER_TICK);
@@ -549,6 +588,8 @@ begin
     CallCounter := 0;
     TortoiseGen := 0;
     PrevCheckpointGen := 0;
+    TortoiseTicks := 0;
+    PrevCheckpointTicks := 0;
     TortoiseChecksum := ComputeChecksum(CellA);
     CopyGrid(CellA, Snapshot);
 
@@ -570,28 +611,18 @@ begin
             subtracting 1 recovers the exact true period -- see FindMu's
             comment for the full derivation. }
           FoundPeriod := Lam - 1;
-          DetectionGen := Gen;
-          DetectionSeconds := TicksToSeconds(ElapsedTicksAccum);
 
-          Mu := FindMu(FoundPeriod);
+          Mu := FindMu(FoundPeriod, MuTicksResult);
 
           if KeepRunning then
           begin
-            { Logging block: EstimatedMuSeconds is a proportional ESTIMATE, not a direct
-              measurement -- FindMu's replay happens after the fact and at
-              a different real-world time than the original run, so there's
-              no wall-clock reading to take AT generation Mu directly. The
-              scaling assumes a roughly constant generations/second rate,
-              which holds here because StepGrid/DrawGrid/ComputeChecksum
-              all do the same fixed amount of work every generation
-              (a full pass over the grid) regardless of what's actually
-              alive on it -- worth knowing it's interpolated, not timed. }
-            if DetectionGen > 0 then
-              EstimatedMuSeconds := Round((Mu / DetectionGen) * DetectionSeconds)
-            else
-              EstimatedMuSeconds := 0;
+            { Logging block: MuSeconds is a REAL measurement, accumulated
+              tick-by-tick during FindMu's own replay (see FindMu's comment)
+              -- not derived or scaled from the original detection run's
+              timing the way an estimate would be. }
+            MuSeconds := TicksToSeconds(MuTicksResult);
 
-            WriteLn(LogFile, SeedVal, ',', Mu, ',', EstimatedMuSeconds, ',', FoundPeriod);
+            WriteLn(LogFile, SeedVal, ',', Mu, ',', MuSeconds, ',', FoundPeriod);
             Flush(LogFile);
 
             { Tied to a successful log write deliberately: SeedVal, at any

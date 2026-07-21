@@ -1,4 +1,4 @@
-# HL386.pas
+# HL386T.pas
 
 A [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life) screensaver for the Pocket 386, written in Turbo
 Pascal 7.0 -- part of the same Life-family of screensavers found elsewhere
@@ -7,16 +7,20 @@ the visuals rather than just running for its own sake.
 
 ## Two versions
 
-- **`HL386.pas`** -- the speed-improved version. Identical behavior and
-  output to `HL386_Brent.pas` below, but `FindMu` (see "What it does")
-  usually skips most of its replay by starting from a previously-saved
-  checkpoint instead of generation 0, when provably safe to do so.
-  This is the one to use.
+- **`HL386T.pas`** -- the one to use. Same previous-checkpoint shortcut
+  in `FindMu` as the earlier `HL386.pas` (now retired), plus real
+  measured timing: `CycleCandidate` preserves the actual BIOS-tick count
+  alongside each checkpoint's state, and `FindMu` accumulates real
+  elapsed ticks during its own replay rather than estimating from the
+  original detection run's timing. CSV's third column is `MuSeconds` --
+  a genuine measurement, not an estimate.
 - **`HL386_Brent.pas`** -- the reference version: straightforward,
-  textbook two-phase Brent's algorithm, no shortcut. `FindMu` always
-  replays from generation 0. Kept alongside the optimized version as a
-  known-simple baseline for comparison, and as a fallback if the
-  shortcut in `HL386.pas` is ever suspected of misbehaving.
+  textbook two-phase Brent's algorithm, no shortcut, and still the
+  original proportional-estimate timing (`EstimatedMuSeconds`), left
+  unchanged deliberately to preserve a known-simple baseline that
+  doesn't need re-testing every time the optimized version changes.
+  Kept alongside `HL386T.pas` as a comparison point and a fallback if
+  the shortcut is ever suspected of misbehaving.
 
 ## What it does
 
@@ -42,18 +46,23 @@ the program was hung.
 ## CSV output
 
 Each convergence appends a row to `LIFELOG.CSV`, in the program's own
-working directory, with four fields:
+working directory, with four fields. The first three fields mean the
+same thing in both files; the fourth column's name and meaning differs
+between them:
 
 ```
-Seed,Mu,EstimatedMuSeconds,Period
+HL386T.pas:       Seed,Mu,MuSeconds,Period
+HL386_Brent.pas:  Seed,Mu,EstimatedMuSeconds,Period
 ```
 
 - **Seed** -- the starting seed value for that run
 - **Mu** -- the exact generation at which the pattern first entered its
   repeating cycle
-- **EstimatedMuSeconds** -- an estimate (not a direct measurement) of real
-  elapsed seconds at generation Mu, scaled proportionally from measured
-  timing elsewhere in the run
+- **MuSeconds** (`HL386T.pas`) -- real elapsed seconds at generation Mu,
+  accumulated tick-by-tick during `FindMu`'s own replay
+- **EstimatedMuSeconds** (`HL386_Brent.pas`) -- an estimate, not a direct
+  measurement, scaled proportionally from timing measured elsewhere in
+  the run
 - **Period** -- the exact length of the repeating cycle, in generations
 
 Elapsed time is tracked via the BIOS timer-tick counter rather than the
@@ -104,23 +113,25 @@ Confirmed on real hardware, both files, in full.
 hourglass progress indicator animates correctly, and the CSV output
 format (`Seed,Mu,EstimatedMuSeconds,Period`) is correct.
 
-`HL386.pas`: compiled and running on the actual Pocket 386. The
-previous-checkpoint shortcut in `FindMu` is confirmed working -- no long
-silent wait on convergence, and the CSV output matches
-`HL386_Brent.pas`'s `Mu` and `Period` exactly for the same seeds (only
-`EstimatedMuSeconds` differs slightly between runs, as expected for a
-wall-clock estimate). The corrected interrupted-seed exit message is
-also confirmed:
+`HL386T.pas`: compiled and running on the actual Pocket 386, and
+validated far beyond a first smoke test. The previous-checkpoint
+shortcut in `FindMu` is confirmed working -- no long silent wait on
+convergence -- and the real tick-based `MuSeconds` has been cross-checked
+against `HL386_Brent.pas`'s `Mu` and `Period` (which match exactly for
+the same seeds, as expected from a deterministic simulation). Beyond
+that: run continuously across two separate Pocket 386 units in parallel
+over several days, covering seeds 1-570 with zero gaps and zero
+duplicates in the combined log, including multiple unattended stretches
+of 20+ hours each. One logging anomaly turned up early in this process
+and never recurred -- see "Version history" for what happened and how it
+was chased down. The corrected interrupted-seed exit message is also
+confirmed:
 
 ```
 Run stopped by user request.
 Seed 3 was interrupted -- not logged.
 Last completed seed: 2
 ```
-
-## Next Steps
-
-Add tick counter variable to better track actual seed time.
 
 ## Version history
 
@@ -194,4 +205,40 @@ Add tick counter variable to better track actual seed time.
   as-is at this point specifically to preserve a known-simple reference
   implementation -- see "Two versions" above for what the shortcut does
   and why it's believed correct.
-
+- **`HL386T.pas` replaced `HL386.pas` as the primary version.** The old
+  `EstimatedMuSeconds` proportional estimate was always an approximation
+  -- accurate enough to be useful, but not a real measurement. `HL386T`
+  adds genuine tick-based timing: `CycleCandidate` now preserves the
+  real BIOS-tick count alongside each checkpoint's saved state (mirroring
+  how it already preserved the checkpoint's generation number and grid),
+  and `FindMu` accumulates real elapsed ticks during its own replay,
+  starting from that preserved value when the shortcut is used rather
+  than from zero. `HL386_Brent.pas` was deliberately left on the old
+  estimate -- changing it means re-testing it, and its whole purpose is
+  being a stable, known-simple baseline that doesn't move.
+- **A logging anomaly, chased down but never conclusively explained.**
+  Early in `HL386T`'s first extended run, a session that visibly
+  progressed through dozens of seeds (confirmed by the seed number
+  advancing on screen) produced no new rows in `LIFELOG.CSV` at all --
+  not appended, not a fresh file either. Code review turned up nothing:
+  the file-open, write, and flush logic was byte-for-byte identical to
+  the already-confirmed-working `HL386.pas`. Two direct hardware tests
+  afterward -- creating a fresh file, then appending to an existing one
+  -- both worked correctly. No write-protection on the card, a clean
+  compile, and every subsequent run since (spanning a combined ~570
+  seeds across two separate machines, including several unattended
+  stretches of 20+ hours each) logged with zero recurrence. Leading
+  theories: a stray gamma ray flipping a bit in memory, or an unknown
+  time traveler suppressing vital data to protect the outcome of the
+  temporal cold war. Practical takeaway: long unattended runs appear to
+  be reliable, especially for casual blinkenlights-screensaver use; if
+  data collection matters more, deleting `LIFELOG.CSV` before each run
+  costs nothing and sidesteps whatever this was entirely.
+- **Two-machine parallel validation.** Since each seed's outcome is
+  fully independent and deterministic, two Pocket 386 units were run
+  simultaneously on disjoint seed ranges (one climbing from a low
+  starting point, the other from a high one) specifically to build
+  confidence in long unattended runs faster, and to accumulate a larger
+  dataset than a single machine could in the same time. The combined
+  result: seeds 1-570, zero gaps, zero duplicates, confirmed by direct
+  inspection of the merged log.
