@@ -23,6 +23,11 @@ Currently used with the PROP/IO board for SD card access. Formerly known as N8VE
 ### The High Nibble IMSAI 8080 Clone (Z80)
 - Nothing uploaded yet
 
+### Pocket 386 (80386)
+40 MHz 386SX SoC (ALi M6117), DOS 6.22, no FPU.
+- [Turbo Pascal 7: HL386](../80386/Pocket386/Turbo-Pascal-7/HL386/) — Conway's Game of Life screensaver with a data-logging component, Brent's-algorithm cycle detection, and real BIOS-tick timing
+- [Turbo Pascal 7: Prime386](../80386/Pocket386/Turbo-Pascal-7/Prime386/) — a "Prime95-like" CPU/memory stress test using Lucas-Lehmer primality testing in pure integer/bignum arithmetic, since this machine has no FPU
+
 ## Cross-machine tools
 
 - [RomWBW-HBIOS](../RomWBW-HBIOS/) — tools that talk to RomWBW's HBIOS layer directly, portable across any RomWBW board

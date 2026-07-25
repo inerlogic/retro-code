@@ -4,4 +4,4 @@
 
 ## Languages used here
 
-- [Turbo-Pascal-7.0](Turbo-Pascal-7/) 
+- [Turbo-Pascal-7.0](Turbo-Pascal-7/) — Game of Life screensaver/logger and a "Prime95-like" CPU/memory stress test
