@@ -47,25 +47,29 @@ test and switch modes.
   range (~2.147 billion) but is still under 2^32. This is safe in TP7
   specifically because (a) Pascal's `shr`/`shl` are logical shifts
   regardless of sign, and (b) `$Q-` (no overflow-check trap) is the
-  compiler default -- confirmed against actual Pascal language
-  semantics, not assumed.
+  compiler default.
 
 ## Timing (for the memory-scan burn-in mode)
 
-Elapsed time uses `GetDate`/`GetTime` (DOS's own clock), linearized via
-a day-number conversion, rather than the raw BIOS tick counter --
-DOS's date-keeping already handles midnight rollover correctly
-(driven by the same timer interrupt chain), so no custom
-rollover-detection logic is needed. Verified against Python's
-`datetime` across 100,000+ fuzzed date/time pairs spanning leap years,
+Originally planned around the raw BIOS tick counter, with manual
+midnight-rollover detection (verified in Python against a simulated
+5-day burn-in with irregular polling). Switched to DOS's own
+`GetDate`/`GetTime` instead -- DOS's date-keeping already handles
+midnight rollover correctly (same underlying timer interrupt chain),
+so hand-rolled rollover logic isn't needed. The day-number
+linearization this requires was verified against Python's `datetime`
+across 100,000+ fuzzed date/time pairs spanning leap years and
 month/year boundaries.
 
-Checked the RTC's Daylight-Savings-Enable bit directly on the actual
+That raised a real question before settling on it for good: could an
+RTC-level Daylight-Savings-Enable bit silently jump the clock by an
+hour mid-run, independent of DOS? (DOS 6.22 itself has no DST logic --
+that was a Windows Control Panel feature -- but the RTC hardware could,
+in principle, regardless of the OS.) Checked directly on the actual
 hardware via `DEBUG` (`O 70 0B` / `I 71`) rather than assuming: reads
-back `02`, meaning bit 0 (DSE) is 0 -- disabled. Combined with DOS 6.22
-itself having no DST logic (that was a Windows Control Panel feature),
-this machine's clock has no seasonal auto-adjustment to worry about
-during a multi-day unattended run.
+back `02`, meaning bit 0 (DSE) is 0 -- disabled. With that confirmed,
+`GetDate`/`GetTime`-based elapsed timing is safe on this machine, and
+is the final approach used -- no tick-counting fallback needed.
 
 ## Verification methodology
 
@@ -85,27 +89,6 @@ TP7-specific arithmetic semantics (shift direction, overflow-check
 default) were checked against actual Pascal language documentation,
 not assumed from general programming experience.
 
-## Bugs caught before reaching hardware
-
-- **Missing subtract-2 step**: first version of the LL loop squared
-  and reduced `s` but never subtracted 2, failing every known-prime
-  exponent. Caught immediately by the known-answer check.
-- **Missing `IsZero` function**: called in `LucasLehmerTest` but never
-  defined -- a plain transcription slip, caught by re-verifying the
-  literal Pascal structure in Python rather than just the algorithm.
-- **Day-number formula typo**: a wrong constant (`12` instead of `9`)
-  in the civil-calendar day-count conversion, caught by fuzzing against
-  Python's `datetime` (would have silently produced elapsed times off
-  by up to ~90 days).
-- **Premature comment closure**: inline mentions of the literal text
-  `{$Q-}` inside already-open `{ }` comments closed those comments
-  early (Pascal's `{ }` comments don't nest -- the compiler closes at
-  the *next* `}` regardless of intervening `{`), dumping the rest of
-  each comment out as unparseable code. Surfaced on real hardware as
-  `Error 36: BEGIN expected` with no `begin` anywhere nearby the actual
-  problem. Fixed by switching to sparse `//` line comments throughout,
-  which don't have this failure mode.
-
 ## Status
 
 **Stage 1 of 2**, CPU-test core only -- `PRIME386.PAS` currently
@@ -117,7 +100,7 @@ once this core is confirmed clean on both Pocket 386 units.
 
 ## Next steps
 
-- Get `PRIME386.PAS` compiling and running clean on both units.
+- Get `PRIME386.PAS` compiling and running clean.
 - Add the XMS extended-memory scanner module.
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add the two-mode menu with stop/switch, and exit-summary logging

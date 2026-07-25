@@ -47,7 +47,7 @@ the program was hung.
 
 Each convergence appends a row to `LIFELOG.CSV`, in the program's own
 working directory, with four fields. The first three fields mean the
-same thing in both files; the fourth column's name and meaning differs
+same thing in both files; the third column's name and meaning differs
 between them:
 
 ```
@@ -66,7 +66,8 @@ HL386_Brent.pas:  Seed,Mu,EstimatedMuSeconds,Period
 - **Period** -- the exact length of the repeating cycle, in generations
 
 Elapsed time is tracked via the BIOS timer-tick counter rather than the
-system clock, since this machine's CMOS clock isn't reliable.
+system clock, since this machine's CMOS clock isn't reliable -- see
+[Pocket 386](../../) for the shared hardware note on this.
 
 ## Oscillating structures
 
@@ -98,12 +99,9 @@ it left off automatically.
 
 ## Hardware & software
 
-- **Hardware:** Pocket 386, an ALi M6117-based 386SX-compatible mini
-  laptop. No official product page exists beyond its AliExpress
-  storefront; for an overview, see
-  [Liliputing's write-up](https://liliputing.com/pocket-386-is-a-mini-laptop-for-retro-computing-with-support-for-dos-and-windows-95/).
-- **Software:** Turbo Pascal 7.0, sourced from
-  [WinWorld](https://winworldpc.com/product/turbo-pascal/7x).
+See [Pocket 386](../../) for the machine itself (including a shared
+hardware note on the unreliable CMOS clock, relevant here too) and
+[Turbo Pascal 7.0](../) for the compiler.
 
 ## Status
 
