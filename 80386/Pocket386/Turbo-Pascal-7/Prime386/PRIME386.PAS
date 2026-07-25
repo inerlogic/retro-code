@@ -1,13 +1,13 @@
 {$Q-,R-}
-// PRIME386.PAS -- Lucas-Lehmer CPU self-test for the Pocket 386 (no FPU)
-// Stage 1 of 2: CPU-test core only. See README.md for design/verification notes.
+{ PRIME386.PAS -- Lucas-Lehmer CPU self-test for the Pocket 386 (no FPU) }
+{ Stage 1 of 2: CPU-test core only. See README.md for design/verification notes. }
 
 program Prime386;
 
 const
-  MaxP   = 61;              // largest exponent supported
-  NLIMB  = 4;                // words per bignum: ceil(61/16)
-  NLIMB2 = 2 * NLIMB;        // width for squaring results
+  MaxP   = 61;  { largest exponent supported }
+  NLIMB  = 4;  { words per bignum: ceil(61/16) }
+  NLIMB2 = 2 * NLIMB;  { width for squaring results }
 
   NumTestExponents = 5;
   TestExponents: array[1..NumTestExponents] of Byte = (13, 17, 19, 31, 61);
@@ -16,7 +16,7 @@ type
   TBigNum  = array[0..NLIMB-1]  of Word;
   TBigNum2 = array[0..NLIMB2-1] of Word;
 
-// --- small helpers ---
+{ --- small helpers --- }
 
 procedure ZeroBig(var b: TBigNum);
 var i: Integer;
@@ -30,9 +30,9 @@ begin
   for i := 0 to NLIMB2-1 do b[i] := 0;
 end;
 
-// Schoolbook squaring, NLIMB words -> NLIMB2 words.
-// a[i]*a[j] can exceed signed 32-bit range but stays < 2^32; shr/and
-// still extract the correct bits (Pascal shr is logical, not arithmetic).
+{ Schoolbook squaring, NLIMB words -> NLIMB2 words. }
+{ a[i]*a[j] can exceed signed 32-bit range but stays < 2^32; shr/and }
+{ still extract the correct bits (Pascal shr is logical, not arithmetic). }
 procedure SquareWords(const a: TBigNum; var result: TBigNum2);
 var
   i, j, k: Integer;
@@ -60,7 +60,7 @@ begin
   end;
 end;
 
-// Add two bignums, truncated to NLIMB words; returns carry-out.
+{ Add two bignums, truncated to NLIMB words; returns carry-out. }
 function AddBigTrunc(const a, b: TBigNum; var result: TBigNum): Word;
 var
   i: Integer;
@@ -77,7 +77,7 @@ begin
   AddBigTrunc := Word(carry);
 end;
 
-// Unsigned compare: -1, 0, or 1.
+{ Unsigned compare: -1, 0, or 1. }
 function CompareBig(const a, b: TBigNum): Integer;
 var i: Integer;
 begin
@@ -89,8 +89,8 @@ begin
   end;
 end;
 
-// Mersenne mod-reduction: shift-and-add trick, x mod (2^p - 1).
-// Converges in at most ~2 iterations (verified); safety cap at 8.
+{ Mersenne mod-reduction: shift-and-add trick, x mod (2^p - 1). }
+{ Converges in at most ~2 iterations (verified); safety cap at 8. }
 procedure ModMersenneWords(const x: TBigNum2; p: Byte; var resultOut: TBigNum);
 var
   fullWords, remBits: Byte;
@@ -109,7 +109,7 @@ begin
   iterCount := 0;
 
   repeat
-    // does cur already fit in p bits?
+{ does cur already fit in p bits? }
     stillTooBig := False;
     for i := NLIMB2-1 downto fullWords do
     begin
@@ -125,13 +125,13 @@ begin
     end;
     if not stillTooBig then Break;
 
-    // low := cur mod 2^p
+{ low := cur mod 2^p }
     ZeroBig(low);
     for i := 0 to fullWords-1 do low[i] := cur[i];
     if remBits <> 0 then
       low[fullWords] := cur[fullWords] and ((Word(1) shl remBits) - 1);
 
-    // high := cur div 2^p
+{ high := cur div 2^p }
     ZeroBig(high);
     if remBits = 0 then
     begin
@@ -162,12 +162,12 @@ begin
     for i := 0 to NLIMB-1 do cur[i] := summed[i];
 
     Inc(iterCount);
-    if iterCount > 8 then Halt(1);   // logic-error safety net
+    if iterCount > 8 then Halt(1);  { logic-error safety net }
   until False;
 
   for i := 0 to NLIMB-1 do resultOut[i] := cur[i];
 
-  // all-ones (2^p - 1) maps to 0
+{ all-ones (2^p - 1) maps to 0 }
   ZeroBig(allOnes);
   for i := 0 to fullWords-1 do allOnes[i] := $FFFF;
   if remBits <> 0 then allOnes[fullWords] := (Word(1) shl remBits) - 1;
@@ -175,7 +175,7 @@ begin
   if CompareBig(resultOut, allOnes) = 0 then ZeroBig(resultOut);
 end;
 
-// (s - 2) mod (2^p - 1). s in [0,2)  wraps by adding m = 2^p-1.
+{ (s - 2) mod (2^p - 1). s in [0,2)  wraps by adding m = 2^p-1. }
 procedure Sub2Mod(var s: TBigNum; p: Byte);
 var
   two, m, temp: TBigNum;
@@ -233,7 +233,7 @@ begin
     if b[i] <> 0 then begin IsZero := False; Exit; end;
 end;
 
-// The self-verifying core: True if 2^p - 1 tests prime.
+{ The self-verifying core: True if 2^p - 1 tests prime. }
 function LucasLehmerTest(p: Byte): Boolean;
 var
   s: TBigNum;
@@ -257,7 +257,7 @@ begin
   LucasLehmerTest := IsZero(s);
 end;
 
-// --- test harness: run known Mersenne-prime exponents, print PASS/FAIL ---
+{ --- test harness: run known Mersenne-prime exponents, print PASS/FAIL --- }
 var
   idx: Integer;
   p: Byte;
