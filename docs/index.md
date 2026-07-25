@@ -15,6 +15,7 @@ Pocket computer, used over Tera Term with ANSI/VT100 emulation.
 - [Aztec-C: Utilities](../Z180/SC131/Aztec-C/utilities/) — cleanup + file paging tools
 - [BASIC-80](../Z180/SC131/BASIC-80/) — tokenized MBASIC, including the classic 2D Conway's Life
 - [Turbo Pascal 3](../Z180/SC131/Turbo-Pascal-3/) — Tetris variants, a dungeon crawler, color Life, hex-π displays
+- [DX-Forth](../Z180/SC131/DX-Forth/) — a paged file viewer
 
 ### RetroBrew SBC (Z80)
 Currently used with the PROP/IO board for SD card access. Formerly known as N8VEM.

@@ -69,6 +69,27 @@ Elapsed time is tracked via the BIOS timer-tick counter rather than the
 system clock, since this machine's CMOS clock isn't reliable -- see
 [Pocket 386](../../) for the shared hardware note on this.
 
+## Statistical analysis (seeds 1-570 sweep)
+
+![Mu distribution tail analysis](mu_tail_analysis_final.png)
+
+Across the full 570-seed combined sweep:
+
+- **Mu is roughly log-normally distributed.** Mean and median of
+  log(Mu) are nearly identical (7.27 vs 7.25), the signature of a
+  right-skewed distribution that looks symmetric on a log scale. Raw
+  Mu ranges from 318 to 6037, with most seeds converging in the
+  500-2000 generation range and a long, thinning tail beyond that.
+- **Period 2 dominates overwhelmingly**: 566 of 570 seeds (99.3%)
+  settle into a period-2 oscillation. Only four seeds -- 1, 26, 302,
+  and 446 -- land on period 6 instead; no other period appeared
+  anywhere in the sweep.
+- **A single, isolated Mu ceiling**: seed 482 is the slowest to
+  converge in the entire sweep, at Mu=6037 -- more than 800
+  generations clear of the next-highest seed (550, at Mu=5192), and
+  well over 3x the sweep's mean. The rest of the tail is comparatively
+  tightly clustered by contrast.
+
 ## Oscillating structures
 
 Because each hex digit is just 4 packed bits, the actual Life patterns on
