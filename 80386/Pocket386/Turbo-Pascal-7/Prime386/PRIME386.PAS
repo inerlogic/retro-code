@@ -104,12 +104,17 @@ var
 begin
   fullWords := p div 16;
   remBits   := p mod 16;
+  WriteLn('  [enter MMW: p=', p, ' fullWords=', fullWords, ' remBits=', remBits, ']');
+  Flush(Output);
 
   cur := x;
   iterCount := 0;
 
   repeat
 { does cur already fit in p bits? }
+    WriteLn('    [iter ', iterCount, ': cur=', cur[0], ',', cur[1], ',', cur[2], ',', cur[3],
+            ',', cur[4], ',', cur[5], ',', cur[6], ',', cur[7], ']');
+    Flush(Output);
     stillTooBig := False;
     for i := NLIMB2-1 downto fullWords do
     begin
@@ -162,7 +167,12 @@ begin
     for i := 0 to NLIMB-1 do cur[i] := summed[i];
 
     Inc(iterCount);
-    if iterCount > 8 then Halt(1);  { logic-error safety net }
+    if iterCount > 8 then
+    begin
+      WriteLn;
+      WriteLn('*** ModMersenneWords did not converge for p=', p, ' after 8 iterations -- logic error ***');
+      Halt(1);
+    end;
   until False;
 
   for i := 0 to NLIMB-1 do resultOut[i] := cur[i];
@@ -248,11 +258,16 @@ begin
 
   for i := 1 to p - 2 do
   begin
+    Write('.');
+    Flush(Output);
     SquareWords(s, sq);
+    WriteLn('  [after SquareWords: p=', p, ']');
+    Flush(Output);
     ModMersenneWords(sq, p, reduced);
     s := reduced;
     Sub2Mod(s, p);
   end;
+  WriteLn;
 
   LucasLehmerTest := IsZero(s);
 end;
@@ -271,6 +286,7 @@ begin
   begin
     p := TestExponents[idx];
     Write('  p=', p:3, '  2^', p, '-1  ... ');
+    Flush(Output);
     ok := LucasLehmerTest(p);
     if ok then
       WriteLn('PASS (s=0, correctly prime)')

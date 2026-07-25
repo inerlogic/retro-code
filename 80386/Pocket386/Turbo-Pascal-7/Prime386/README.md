@@ -89,18 +89,59 @@ TP7-specific arithmetic semantics (shift direction, overflow-check
 default) were checked against actual Pascal language documentation,
 not assumed from general programming experience.
 
+## Open investigation: possible hardware fault (unresolved)
+
+While bringing up the CPU-test core on real hardware, a diagnostic
+build (temporarily printing internal state inside `ModMersenneWords`)
+showed `p` -- a plain `Byte` parameter that should only ever be 13,
+17, 19, 31, or 61 -- reading as a garbage value partway through a
+run: 145 in one build, 53 in another, 41 in a third, each time
+internally self-consistent (the derived `fullWords`/`remBits` always
+matched the garbage `p` exactly) but never matching any actual
+test-set exponent.
+
+Cross-checked the identical source across three independent
+compilations:
+- **Free Pascal** (`fpc -Mtp`, native Linux target): compiled clean,
+  all five test cases pass, zero corruption.
+- **Real Turbo Pascal 7.0 under DOSBox** (the actual TP7 compiler,
+  emulated hardware): four separate runs, zero corruption, all five
+  tests pass every time.
+- **Real Turbo Pascal 7.0 on the physical Pocket 386**: corruption
+  reproduces reliably for a given build, but the specific wrong value
+  shifts whenever the surrounding code changes (145 -> 53 -> 41 across
+  three diagnostic revisions) -- consistent with a memory-layout-
+  sensitive fault rather than a fixed logic error, since the identical
+  source is correct everywhere except this one physical machine.
+
+Same compiler, same source, correct in every environment except the
+physical unit. Working theory: a genuine hardware fault (bad RAM cell
+or flaky memory bus) on this specific Pocket 386, surfacing as stack
+corruption under `ModMersenneWords`'s heavier local-variable load --
+an isolated test replicating just the parameter shapes involved,
+with no other locals, did not reproduce it.
+
+**Not yet confirmed.** Needs a same-binary run on the second Pocket
+386 unit (busy at time of writing) to distinguish a fault specific to
+this physical unit from something else. Leaving this open rather than
+closing it out -- there's a real chance this is exactly the kind of
+fault the tool exists to catch, just surfaced earlier and less
+formally than the finished memory scanner would have.
+
 ## Status
 
 **Stage 1 of 2**, CPU-test core only -- `PRIME386.PAS` currently
 contains just the bignum/Lucas-Lehmer engine and a test harness that
-runs the known exponent set and prints PASS/FAIL. Not yet compiled
-successfully on real hardware (in progress). No XMS module, menu,
-elapsed-time display, or exit-summary logging yet -- those are next,
-once this core is confirmed clean on both Pocket 386 units.
+runs the known exponent set and prints PASS/FAIL. Compiles and runs
+on the physical Pocket 386, but currently produces the corruption
+described above under diagnostic builds -- see "Open investigation."
+No XMS module, menu, elapsed-time display, or exit-summary logging
+yet -- those are next, once the hardware question above is resolved
+one way or the other.
 
 ## Next steps
 
-- Get `PRIME386.PAS` compiling and running clean.
+- Resolve the open hardware question above (second-unit test).
 - Add the XMS extended-memory scanner module.
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add the two-mode menu with stop/switch, and exit-summary logging
@@ -113,3 +154,9 @@ once this core is confirmed clean on both Pocket 386 units.
 - Initial CPU-test core written, verified in Python, and confirmed
   syntactically clean after fixing a premature-comment-closure bug
   found via a real compile attempt on hardware.
+- First real-hardware run surfaced unexplained corruption of a simple
+  parameter value. Ruled out the algorithm and the source (Python
+  re-verification, Free Pascal, and DOSBox-hosted real TP7 all run it
+  correctly) -- left open as a likely physical hardware fault pending
+  a same-binary test on the second unit. See "Open investigation"
+  above.
