@@ -112,7 +112,7 @@ compilations:
   compiled clean, all five test cases pass, zero corruption.
 - **Real Turbo Pascal 7.0 under DOSBox** (the actual TP7 compiler,
   emulated hardware): four separate runs, zero corruption, all five
-  tests pass every time.
+  tests pass every time. WTF?
 
 The turning point: recompiling the identical source from scratch on a
 *second, physically different* Pocket 386 unit produced byte-for-byte
