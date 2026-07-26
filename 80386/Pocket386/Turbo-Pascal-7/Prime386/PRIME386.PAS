@@ -538,16 +538,23 @@ begin
   TestChunk := okWrite and okRead and okCompare;
 end;
 
+const
+  MaxXMSBlocks = 32;  { safety cap in case free XMS is heavily fragmented }
+
 procedure RunXMSScanner;
 var
+  BlockHandle: array[1..MaxXMSBlocks] of Word;
+  BlockKB:     array[1..MaxXMSBlocks] of Word;
+  NumBlocks:   Integer;
+  TotalKBGrabbed: LongInt;
   LargestKB: Word;
-  Handle: Word;
   chunk, numChunks: LongInt;
   faults: LongInt;
   patternIdx: Integer;
   patterns: array[1..2] of Word;
   patName: array[1..2] of string[12];
-  ok, stopRequested: Boolean;
+  ok, stopRequested, allocFailed: Boolean;
+  b: Integer;
 begin
   WriteLn;
   WriteLn('--- XMS Scanner (v1: fill/read-back patterns) ---');
@@ -565,9 +572,32 @@ begin
 
   GetXMSEntry;
 
-  LargestKB := XMSQueryLargestKB;
-  WriteLn('Largest free XMS block: ', LargestKB, ' KB');
-  if LargestKB < 1 then
+  { Grab every free block, largest-first, until nothing's left or the }
+  { safety cap is hit. This covers fragmented free memory, not just   }
+  { the single largest contiguous block, since each allocation removes}
+  { that block from what the next query reports as largest. }
+  NumBlocks := 0;
+  TotalKBGrabbed := 0;
+  allocFailed := False;
+
+  repeat
+    LargestKB := XMSQueryLargestKB;
+    if LargestKB < 1 then Break;
+    if NumBlocks >= MaxXMSBlocks then Break;
+
+    if not XMSAllocate(LargestKB) then
+    begin
+      allocFailed := True;
+      Break;
+    end;
+
+    Inc(NumBlocks);
+    BlockHandle[NumBlocks] := AllocHandle;
+    BlockKB[NumBlocks]     := LargestKB;
+    Inc(TotalKBGrabbed, LargestKB);
+  until False;
+
+  if NumBlocks = 0 then
   begin
     WriteLn('Nothing usable to test.');
     WriteLn('Press any key to return to menu.');
@@ -575,44 +605,45 @@ begin
     Exit;
   end;
 
-  if not XMSAllocate(LargestKB) then
-  begin
-    WriteLn('XMS allocate failed.');
-    WriteLn('Press any key to return to menu.');
-    ReadKey;
-    Exit;
-  end;
-  Handle := AllocHandle;
-  WriteLn('Allocated ', LargestKB, ' KB, handle=', Handle);
+  WriteLn('Grabbed ', NumBlocks, ' block(s), ', TotalKBGrabbed, ' KB total.');
+  if allocFailed then
+    WriteLn('(Stopped grabbing after an allocate failure, testing what was already grabbed.)');
   WriteLn;
 
   patterns[1] := $AAAA; patName[1] := '0xAA fill';
   patterns[2] := $5555; patName[2] := '0x55 fill';
 
-  numChunks := LargestKB;   { 1 KB per chunk }
   faults := 0;
   stopRequested := False;
 
-  for patternIdx := 1 to 2 do
+  for b := 1 to NumBlocks do
   begin
     if stopRequested then Break;
-    Write(patName[patternIdx], ': ');
-    for chunk := 0 to numChunks - 1 do
+    WriteLn('Block ', b, ' of ', NumBlocks, ' (', BlockKB[b], ' KB, handle=',
+            BlockHandle[b], '):');
+    numChunks := BlockKB[b];   { 1 KB per chunk }
+
+    for patternIdx := 1 to 2 do
     begin
-      ok := TestChunk(Handle, chunk * 1024, patterns[patternIdx]);
-      if ok then Write('.')
-      else
-      begin
-        Write('X');
-        Inc(faults);
-      end;
-
-      if KeyPressed then
-        if ReadKey = #27 then stopRequested := True;
-
       if stopRequested then Break;
+      Write('  ', patName[patternIdx], ': ');
+      for chunk := 0 to numChunks - 1 do
+      begin
+        ok := TestChunk(BlockHandle[b], chunk * 1024, patterns[patternIdx]);
+        if ok then Write('.')
+        else
+        begin
+          Write('X');
+          Inc(faults);
+        end;
+
+        if KeyPressed then
+          if ReadKey = #27 then stopRequested := True;
+
+        if stopRequested then Break;
+      end;
+      WriteLn;
     end;
-    WriteLn;
   end;
 
   WriteLn;
@@ -620,9 +651,13 @@ begin
     WriteLn('Run stopped by user request.')
   else
     WriteLn('Walking-bit and address-in-address patterns: not yet implemented (planned v2).');
-  WriteLn('Total faults this run: ', faults);
+  WriteLn('Blocks tested: ', NumBlocks, '   Total KB tested: ', TotalKBGrabbed,
+          '   Total faults: ', faults);
 
-  XMSFree(Handle);
+  { Always free everything grabbed, regardless of how we got here. }
+  for b := 1 to NumBlocks do
+    XMSFree(BlockHandle[b]);
+
   WriteLn;
   WriteLn('Press any key to return to menu.');
   ReadKey;

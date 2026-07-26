@@ -47,9 +47,14 @@ out, using pure integer/bignum arithmetic instead.
   indirection that the compiler couldn't generate in one step;
   replaced with a global variable instead). Confirmed working on real
   hardware: a full run across the largest available XMS block came
-  back with zero faults on both patterns. Walking-bit and
-  address-in-address patterns, plus a proper march algorithm for
-  coupling faults, are deferred to v2.
+  back with zero faults on both patterns. Reworked to grab every free
+  block, largest-first, until none remain, rather than only the
+  single largest one, so fragmented free memory gets covered too;
+  confirmed functionally correct on non-fragmented single-block cases,
+  the actual multi-block aggregation path hasn't been exercised on
+  real fragmented memory yet. Walking-bit and address-in-address
+  patterns, plus a proper march algorithm for coupling faults, are
+  deferred to v2.
 
 Menu-driven, with the ability to stop a running test (ESC) and return
 to the menu to pick another mode.
@@ -193,16 +198,58 @@ full diagnostic trace.
 and confirmed.** The menu and all three modes exist in `PRIME386.PAS`.
 XMS Scanner and Prime Check are both confirmed working on real
 hardware, zero faults on XMS Scanner's full-block run, zero mismatches
-across 100+ Prime Check sweeps. No elapsed-time display or
+across 3000+ Prime Check sweeps. XMS Scanner now grabs every free
+block rather than only the single largest one (handles fragmented
+free memory), confirmed functionally correct on non-fragmented single-
+block cases; the actual multi-block aggregation path hasn't been
+exercised on real fragmented memory yet. No elapsed-time display or
 exit-summary logging yet.
+
+**Faulty-unit test (all three modes), passed, and coverage is now
+confirmed, not just assumed.** All three modes were run on the first
+Pocket 386 unit, the one CheckIt found a genuine extended-memory
+parity fault on (see "Hardware finding" above). CPU Check, Prime
+Check, and XMS Scanner all came back clean.
+
+That result needed a real coverage check before it could be trusted,
+since the XMS Scanner grabs the largest free block reported and there
+was no guarantee that block actually reached the address CheckIt
+flagged. Working it out: CheckIt's full test found 27 failing
+addresses (`401704h` through `47D704h`), all sharing the same low-order
+offset (`xxx704h`) and all failing on bit 3, clustering into two bands
+around 4.00 to 4.11 MB and 4.44 to 4.51 MB physical. Subtracting the
+1 MB start of extended memory (`100000h`) puts that fault band at
+roughly **3078 KB to 3574 KB into extended memory**. The scanner's
+run on that unit grabbed **7104 KB** in one contiguous block, which
+comfortably covers the fault band with over 3500 KB of margin on top.
+Assuming the handle's offset 0 lines up with the start of usable
+extended memory (the normal case for a single free block reported by
+the driver), the scan's address range did include the exact region
+CheckIt flagged.
+
+So this is a real result: the specific offset range is confirmed
+tested, not just assumed, and it still came back clean. That's worth
+sitting with rather than either dismissing or over-trusting. A
+hardware fault that CheckIt catches but a flat 0xAA/0x55 fill/
+read-back doesn't isn't a contradiction, it's a plausible sign that
+this fault needs a different test pattern to expose (see "Next steps"
+below), or that it's intermittent/marginal rather than consistently
+present. It doesn't mean the XMS Scanner's fill/read-back logic is
+broken, both the CPU Check and Prime Check paths are independently
+confirmed working, and the XMS Scanner's move/compare mechanics were
+separately confirmed clean on the known-good second unit.
 
 ## Next steps
 
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add exit-summary logging (final results only, no periodic writes,
   out of respect for the CF card).
-- v2: walking-bit and address-in-address XMS patterns, plus a proper
-  march algorithm, for coupling-fault coverage.
+- Walking-bit and address-in-address XMS patterns, plus a proper march
+  algorithm for coupling faults: bumped up in priority given the
+  faulty-unit result above. A confirmed hardware fault sat inside a
+  fully-covered fill/read-back test and still came back clean, which
+  suggests the simple pattern may not be catching what CheckIt catches
+  on this specific chip.
 
 ## Version history
 
@@ -236,3 +283,19 @@ exit-summary logging yet.
   (zero faults across the largest available block, both patterns).
   Prime Check confirmed clean on real hardware (100+ sweeps, zero
   mismatches).
+- XMS Scanner reworked to grab every free block, largest-first, until
+  none remain (up to a 32-block safety cap), instead of only the
+  single largest block, so fragmented free memory gets covered too.
+  Tested on both Pocket 386 units and under Windows specifically to
+  try to force fragmentation; free XMS came back as one contiguous
+  block every time, so the loop's no-fragmentation path (grab one
+  block, next query returns 0, stop) is confirmed, but the actual
+  multi-block aggregation logic remains unexercised on real hardware.
+- Worked out the address math on the original faulty-unit clean run:
+  CheckIt's 27 failing addresses convert to roughly 3078 to 3574 KB
+  into extended memory, which the 7104 KB block that run grabbed
+  fully covers. So that clean result reflects genuine coverage of the
+  known fault's address range, not a coverage gap, raising walking-bit
+  and march-algorithm patterns from planned-but-unscheduled to a
+  priority next step, since a flat fill/read-back may not be
+  sufficient to expose this specific fault.
