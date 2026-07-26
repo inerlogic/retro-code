@@ -5,7 +5,7 @@ size, to find seed values with interesting (long transient / long cycle)
 dynamics before committing to testing them on real hardware.
 
 This is the actual methodology behind the seed choices documented in
-Z80/IMSAI/README.md for LIFE8.ASM (seed 27) and LIFE16.ASM (seed 5471) --
+Z80/IMSAI/README.md for LIFE8.ASM (seed 27) and LIFE16.ASM (seed 5471),
 not just an assertion, something you can rerun and verify.
 
 The rule (Millen's YYXYY neighborhood, BYTE Magazine, Dec 1978,
