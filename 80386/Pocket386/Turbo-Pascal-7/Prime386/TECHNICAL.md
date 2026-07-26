@@ -104,15 +104,15 @@ test-set exponent.
 
 Cross-checked the identical source across three independent
 compilations:
-- **Free Pascal** (`fpc -Mtp`, native Linux target): compiled clean,
-  all five test cases pass, zero corruption.
-- **Real Turbo Pascal 7.0 under DOSBox** (the actual TP7 compiler,
-  emulated hardware): four separate runs, zero corruption, all five
-  tests pass every time.
 - **Real Turbo Pascal 7.0 on the physical Pocket 386**: corruption
   reproduced reliably for a given build, but the specific wrong value
   shifted whenever the surrounding code changed (145 -> 53 -> 41 across
   three diagnostic revisions).
+- **Free Pascal** (`fpc -Mtp`, native Linux target): Sanity check with a known, known.
+  compiled clean, all five test cases pass, zero corruption.
+- **Real Turbo Pascal 7.0 under DOSBox** (the actual TP7 compiler,
+  emulated hardware): four separate runs, zero corruption, all five
+  tests pass every time.
 
 The turning point: recompiling the identical source from scratch on a
 *second, physically different* Pocket 386 unit produced byte-for-byte
