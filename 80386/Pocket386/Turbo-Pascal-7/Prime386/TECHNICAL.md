@@ -158,8 +158,7 @@ pass. This is unrelated to the bug above (which lived in conventional
 memory, in the stack) but is a real, separate hardware issue on that
 specific unit, worth factoring in if that machine is used for
 anything that touches extended memory (Windows, XMS-using software).
-The second unit's quick CheckIt test came back clean; a full test on
-it, for a fair comparison, is still outstanding.
+The second unit's full CheckIt test came back clean.
 
 ## Status
 
@@ -178,8 +177,6 @@ yet,those are next.
   (final results only, no periodic writes, out of respect for the
   CF card).
 - v2: march-algorithm memory patterns, for coupling-fault coverage.
-- Optional: full CheckIt test on the second unit, for a fair
-  comparison against the first unit's confirmed extended-memory fault.
 
 ## Version history
 
