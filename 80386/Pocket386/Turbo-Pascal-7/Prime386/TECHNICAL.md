@@ -8,7 +8,7 @@ SoC, 386SX/40, no FPU, DOS 6.22, Turbo Pascal 7.0).
 Prime95 stress-tests a PC by running a computation with a known correct
 answer, repeatedly -- a single bit-flip from bad RAM or a flaky ALU
 produces a detectably wrong result rather than silently corrupting
-something unnoticed. It does this via the Lucas-Lehmer primality test
+something unnoticed. It does this via the [https://en.wikipedia.org/wiki/Lucas%E2%80%93Lehmer_primality_test] (Lucas-Lehmer primality test)
 for Mersenne primes, using FFT-based multiplication that leans on
 modern floating-point hardware.
 
