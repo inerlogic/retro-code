@@ -12,7 +12,7 @@ In the beginning, someone wanted to know whether a Pocket 386 could be trusted. 
 
 The Pocket 386 does not have an FPU. This is a bit like asking someone to run a marathon and then discovering, at the start line, that they are a fish. So a new plan was required: the same idea, square a number, reduce it, repeat, and see if the machine arrives at the answer mathematics has already agreed on, done entirely in integer arithmetic, by hand, in Turbo Pascal 7, a language whose defining historical achievement was making 640 kilobytes feel spacious.
 
-This plan was, initially, executed responsibly. Every piece of logic was tested in Python first -- squaring, the Mersenne shift-and-add reduction trick, the whole Lucas-Lehmer loop, fuzzed against tens of thousands of random cases before a single line of actual Pascal was written. This is, by any reasonable standard, the correct way to build something. It did not save anyone from what was coming. Nothing could have.
+This plan was, initially, executed responsibly. Every piece of logic was tested in Python first, squaring, the Mersenne shift-and-add reduction trick, the whole Lucas-Lehmer loop, fuzzed against tens of thousands of random cases before a single line of actual Pascal was written. This is, by any reasonable standard, the correct way to build something. It did not save anyone from what was coming. Nothing could have.
 
 ---
 
@@ -48,7 +48,7 @@ What followed was a proper, old-fashioned hardware investigation, conducted with
 
 This turned out to be a red herring of the highest order, because the actual bug lived in conventional memory, in the stack, an entirely different neighborhood the extended-memory fault had never even visited. Along the way: a German-language program requiring a hunt for an umlaut key that didn't physically exist (resolved, eventually, by Alt+5, on the Pocket 386, for reasons that remain philosophically unclear); a CF card swapped between two physical machines specifically to catch the bug red-handed relocating itself (yes, I own two Pocket 386s); a photograph of an actual RAM chip, squinted at for clues; a BIOS shadow-memory setting checked and found innocent; a GPCS0 chip-select window investigated and found to be nowhere near the scene of the crime.
 
-And then, the moment that should have been the twist ending, and instead was just the beginning of the real mystery: the exact same source, recompiled fresh, on a second, physically different machine -- produced byte-for-byte identical wrong output. Not similar. Not "also broken." Identical, down to the bits.
+And then, the moment that should have been the twist ending, and instead was just the beginning of the real mystery: the exact same source, recompiled fresh, on a second, physically different machine, produced byte-for-byte identical wrong output. Not similar. Not "also broken." Identical, down to the bits.
 
 Two separate, physically distinct lumps of 1990s architecture do not independently arrive at the same specific wrong answer by coincidence. Something else was going on, and it was not a bad chip. Though there was a bad chip, in the one machine.
 
@@ -88,7 +88,7 @@ Which is, on balance, a much better story to have ended up with.
 
 It turns out the story does not actually end there, because someone, eventually, thought to check whether anyone else had ever run into this. Someone had. Borland had.
 
-Borland Pascal 7.0 -- the same 7.0, released in October of 1992 -- shipped with a genuine, documented, entirely real bug: the SHL and SHR instructions, for LongInt operands, with shift values between 16 and 31, were unreliable when run on a 386 or later processor. Not "possibly unreliable." Not "unreliable under specific conditions nobody has ever characterized." Unreliable, full stop, in exactly the way already described here, on exactly the kind of processor already described here. On some processors, it produced garbage. On some processors, it worked. Nobody, at the time, seems to have thought this needed shouting about.
+Borland Pascal 7.0, the same 7.0, released in October of 1992, shipped with a genuine, documented, entirely real bug: the SHL and SHR instructions, for LongInt operands, with shift values between 16 and 31, were unreliable when run on a 386 or later processor. Not "possibly unreliable." Not "unreliable under specific conditions nobody has ever characterized." Unreliable, full stop, in exactly the way already described here, on exactly the kind of processor already described here. On some processors, it produced garbage. On some processors, it worked. Nobody, at the time, seems to have thought this needed shouting about.
 
 It was fixed five months later, in March of 1993, in a release Borland called 7.01, remembered today, by the small number of people who remember it at all, as a "silent maintenance release," which is a wonderfully corporate way of saying "we fixed it and mentioned it to almost nobody." The two versions can, in fact, be told apart by their file timestamps: 7.00 was compiled at 07:00. 7.01 was compiled at 07:01. Someone, somewhere, thought that was a good idea. In fairness, it was.
 
