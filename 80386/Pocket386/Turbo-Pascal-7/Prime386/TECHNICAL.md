@@ -16,21 +16,43 @@ The 386SX in the Pocket 386 has no FPU. Prime386 applies the same
 self-verifying principle, known exponent in, known correct answer
 out, using pure integer/bignum arithmetic instead.
 
-## Two-mode design
+## Files
 
-- **CPU test**: Lucas-Lehmer, run against exponents p for which
-  `2^p - 1` is a *known* Mersenne prime (13, 17, 19, 31, 61). Any run
-  that doesn't end at s=0 indicates an ALU/arithmetic fault.
-- **Memory test** (not yet written,planned next): an XMS-based scan
-  of extended memory using simple fill/read-back patterns (0xAA/0x55,
-  walking bit, address-in-address), separate from the CPU test since
-  the tiny bignum footprint here does essentially nothing to stress
-  RAM on its own. A proper march algorithm (to catch coupling faults,
-  not just stuck-at faults) is planned as a v2 once this v1 pattern
-  set is confirmed working.
+- **`PRIME386.PAS`** — the current program. Menu-driven, three test
+  modes plus quit.
+- **`Prime386-alpha.PAS`** — a frozen snapshot of the original
+  single-purpose CPU-test core, preserved as-is because it's the
+  specific version [THE-SHR16-SAGA.md](README.md) is about. Not
+  maintained going forward; `PRIME386.PAS` is where active work
+  happens.
 
-Menu-driven, two independent modes, with the ability to stop a running
-test and switch modes.
+## Menu design
+
+- **CPU Check**: Lucas-Lehmer, run once against the 5 exponents for
+  which `2^p - 1` is a *known* Mersenne prime (13, 17, 19, 31, 61).
+  Any run that doesn't end at s=0 indicates an ALU/arithmetic fault.
+  Confirmed working on real hardware.
+- **Prime Check**: a continuous stress loop, not a search for new
+  primes (the 4-word bignum tops out at p=61, so there's nothing left
+  to discover in range). Sweeps all 18 primes <= 61 each pass, checking
+  each against its already-known correct answer (9 expected prime, 9
+  expected composite); any mismatch either direction means a hardware
+  fault. Loops until ESC. Confirmed working on real hardware: over
+  100 sweeps, clean the whole way through, zero mismatches.
+- **XMS Scanner**: extended-memory scan using simple fill/read-back
+  patterns (0xAA/0x55), separate from the CPU tests since the tiny
+  bignum footprint does essentially nothing to stress RAM on its own.
+  One compile-time bug found and fixed along the way (a `var`
+  parameter written to from inline asm needed an extra level of
+  indirection that the compiler couldn't generate in one step;
+  replaced with a global variable instead). Confirmed working on real
+  hardware: a full run across the largest available XMS block came
+  back with zero faults on both patterns. Walking-bit and
+  address-in-address patterns, plus a proper march algorithm for
+  coupling faults, are deferred to v2.
+
+Menu-driven, with the ability to stop a running test (ESC) and return
+to the menu to pick another mode.
 
 ## Bignum design
 
@@ -162,21 +184,25 @@ The second unit's full CheckIt test came back clean.
 
 ## Status
 
-**Stage 1 of 2, complete and confirmed.** `PRIME386.PAS` contains the
-bignum/Lucas-Lehmer engine and a test harness running the known
-exponent set. Compiles and runs clean on the physical Pocket 386 --
-all five test cases pass, verified against a full diagnostic trace.
-No XMS module, menu, elapsed-time display, or exit-summary logging
-yet,those are next.
+**Stage 1 (CPU test), complete and confirmed.** The CPU Check menu
+option runs the known exponent set, compiles and runs clean on the
+physical Pocket 386, all five test cases pass, verified against a
+full diagnostic trace.
+
+**Stage 2 (menu, Prime Check, XMS Scanner), core testing complete
+and confirmed.** The menu and all three modes exist in `PRIME386.PAS`.
+XMS Scanner and Prime Check are both confirmed working on real
+hardware, zero faults on XMS Scanner's full-block run, zero mismatches
+across 100+ Prime Check sweeps. No elapsed-time display or
+exit-summary logging yet.
 
 ## Next steps
 
-- Add the XMS extended-memory scanner module.
 - Add the tick/date-based elapsed-time display for burn-in runs.
-- Add the two-mode menu with stop/switch, and exit-summary logging
-  (final results only, no periodic writes, out of respect for the
-  CF card).
-- v2: march-algorithm memory patterns, for coupling-fault coverage.
+- Add exit-summary logging (final results only, no periodic writes,
+  out of respect for the CF card).
+- v2: walking-bit and address-in-address XMS patterns, plus a proper
+  march algorithm, for coupling-fault coverage.
 
 ## Version history
 
@@ -197,3 +223,16 @@ yet,those are next.
   diagnostic trace matches hand-verified arithmetic throughout. Stage
   1 complete. See "Resolved" above, or
   [README.md](README.md) for the full story.
+- Expanded into a menu-driven program: CPU Check (the original
+  single-purpose core), Prime Check (a continuous stress loop over
+  all 18 primes <= 61, checking each against its known correct
+  primality result), and XMS Scanner (extended-memory fill/read-back
+  test, v1 patterns only). The original single-purpose CPU-test
+  source was frozen as `Prime386-alpha.PAS` to preserve the exact
+  version the SHR16 saga is about. One compile error found and fixed
+  in the XMS Scanner (a `var` parameter can't be written to directly
+  from inline asm without an extra indirection step; replaced with a
+  global variable). XMS Scanner confirmed clean on real hardware
+  (zero faults across the largest available block, both patterns).
+  Prime Check confirmed clean on real hardware (100+ sweeps, zero
+  mismatches).
