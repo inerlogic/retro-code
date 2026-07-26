@@ -1,43 +1,24 @@
 """
-Bounds-checked simulation of the exact PRIME386.PAS algorithm, run against
-the exact deterministic value sequence for each real test exponent
-(13, 17, 19, 31, 61) -- not random fuzzing. Any out-of-bounds array access
-raises immediately, mirroring what {$R+} would catch that {$R-} currently
-lets through silently.
+Faithful line-by-line transliteration of PRIME386.PAS's exact logic
+(same helper breakdown: SquareWords, AddBigTrunc, CompareBig,
+ModMersenneWords, Sub2Mod, LucasLehmerTest), NOT the earlier, more
+direct bignum_sim.py, to catch transcription bugs introduced while
+writing the actual Pascal source, before it goes anywhere near a
+compiler.
 """
 
-MASK16 = 0xFFFF
 NLIMB = 4
 NLIMB2 = 8
+MASK16 = 0xFFFF
 
-class BArr:
-    """Bounds-checked array mimicking a fixed-size Pascal array."""
-    def __init__(self, size, name=""):
-        self.size = size
-        self.name = name
-        self.data = [0]*size
-    def __getitem__(self, i):
-        if not (0 <= i < self.size):
-            raise IndexError(f"OOB READ on {self.name}[{i}] (valid: 0..{self.size-1})")
-        return self.data[i]
-    def __setitem__(self, i, v):
-        if not (0 <= i < self.size):
-            raise IndexError(f"OOB WRITE on {self.name}[{i}] (valid: 0..{self.size-1})")
-        self.data[i] = v
-    def copy_from(self, other):
-        for i in range(self.size):
-            self[i] = other[i]
-    def as_list(self):
-        return list(self.data)
+def zero_big():
+    return [0]*NLIMB
 
-def zero_big(name="tmp"):
-    return BArr(NLIMB, name)
-
-def zero_big2(name="tmp2"):
-    return BArr(NLIMB2, name)
+def zero_big2():
+    return [0]*NLIMB2
 
 def square_words(a):
-    result = zero_big2("sq_result")
+    result = zero_big2()
     for i in range(NLIMB):
         carry = 0
         for j in range(NLIMB):
@@ -52,13 +33,14 @@ def square_words(a):
             k += 1
     return result
 
-def add_big_trunc(a, b, result):
+def add_big_trunc(a, b):
+    result = zero_big()
     carry = 0
     for i in range(NLIMB):
         s = a[i] + b[i] + carry
         result[i] = s & MASK16
         carry = s >> 16
-    return carry
+    return result, carry
 
 def compare_big(a, b):
     for i in reversed(range(NLIMB)):
@@ -66,11 +48,13 @@ def compare_big(a, b):
         if a[i] < b[i]: return -1
     return 0
 
+def is_zero(b):
+    return all(x == 0 for x in b)
+
 def mod_mersenne_words(x, p):
     full_words = p // 16
     rem_bits = p % 16
-    cur = zero_big2("cur")
-    cur.copy_from(x)
+    cur = list(x)
     iter_count = 0
     while True:
         still_too_big = False
@@ -85,13 +69,13 @@ def mod_mersenne_words(x, p):
         if not still_too_big:
             break
 
-        low = zero_big("low")
+        low = zero_big()
         for i in range(full_words):
             low[i] = cur[i]
         if rem_bits != 0:
             low[full_words] = cur[full_words] & ((1 << rem_bits) - 1)
 
-        high = zero_big("high")
+        high = zero_big()
         if rem_bits == 0:
             for i in range(NLIMB2 - full_words):
                 if i < NLIMB:
@@ -104,59 +88,57 @@ def mod_mersenne_words(x, p):
                     high[i-full_words] = (val >> rem_bits) | carry_bits
                 carry_bits = (val & ((1 << rem_bits)-1)) << (16-rem_bits)
 
-        summed = zero_big("summed")
-        carry_out = add_big_trunc(low, high, summed)
+        summed, carry_out = add_big_trunc(low, high)
         if carry_out != 0:
-            low2 = zero_big("low_fold")
+            low2 = zero_big()
             low2[0] = carry_out
-            add_big_trunc(summed, low2, summed)
+            summed, _ = add_big_trunc(summed, low2)
 
-        cur = zero_big2("cur")
+        cur = zero_big2()
         for i in range(NLIMB):
             cur[i] = summed[i]
 
         iter_count += 1
         if iter_count > 8:
-            raise RuntimeError(f"would not converge for p={p} after 8 iterations")
+            raise RuntimeError("exceeded safety cap - logic bug")
 
-    result_out = zero_big("result_out")
-    for i in range(NLIMB):
-        result_out[i] = cur[i]
+    result_out = [cur[i] for i in range(NLIMB)]
 
-    all_ones = zero_big("all_ones")
+    all_ones = zero_big()
     for i in range(full_words):
         all_ones[i] = 0xFFFF
     if rem_bits != 0:
         all_ones[full_words] = (1 << rem_bits) - 1
 
     if compare_big(result_out, all_ones) == 0:
-        result_out = zero_big("result_out_zeroed")
+        result_out = zero_big()
+
     return result_out
 
 def sub2mod(s, p):
-    two = zero_big("two"); two[0] = 2
+    two = zero_big(); two[0] = 2
     if compare_big(s, two) >= 0:
-        news = zero_big("news")
-        news.copy_from(s)
-        if news[0] >= 2:
-            news[0] -= 2
+        s = list(s)
+        if s[0] >= 2:
+            s[0] -= 2
         else:
-            news[0] = news[0] + 65536 - 2
+            s[0] = s[0] + 65536 - 2
             i = 1
             while i < NLIMB:
-                if news[i] == 0:
-                    news[i] = 65535; i += 1
+                if s[i] == 0:
+                    s[i] = 65535
+                    i += 1
                 else:
-                    news[i] -= 1; break
-        return news
+                    s[i] -= 1
+                    break
+        return s
     else:
         full_words = p // 16
         rem_bits = p % 16
-        m = zero_big("m")
+        m = zero_big()
         for i in range(full_words): m[i] = 0xFFFF
         if rem_bits != 0: m[full_words] = (1 << rem_bits) - 1
-        temp = zero_big("temp")
-        temp.copy_from(m)
+        temp = list(m)
         need = 2 - s[0]
         if temp[0] >= need:
             temp[0] -= need
@@ -165,34 +147,33 @@ def sub2mod(s, p):
             i = 1
             while i < NLIMB:
                 if temp[i] == 0:
-                    temp[i] = 65535; i += 1
+                    temp[i] = 65535
+                    i += 1
                 else:
-                    temp[i] -= 1; break
+                    temp[i] -= 1
+                    break
         return temp
 
-def is_zero(b):
-    return all(b[i] == 0 for i in range(NLIMB))
-
-def lucas_lehmer_test(p, verbose=False):
+def lucas_lehmer_test(p):
     if p == 2:
         return True
-    s = zero_big("s")
+    s = zero_big()
     s[0] = 4
-    for it in range(1, p-1):
+    for _ in range(1, p-1):   # Pascal: for i := 1 to p-2  => (p-2) iterations
         sq = square_words(s)
         reduced = mod_mersenne_words(sq, p)
-        s = zero_big("s")
-        s.copy_from(reduced)
+        s = reduced
         s = sub2mod(s, p)
-        if verbose:
-            print(f"    iter {it}: s = {s.as_list()}")
-    return is_zero(s)
+    return is_zero(s)   # using the FIXED version (IsZero), not the buggy tautology
 
-for p in [13, 17, 19, 31, 61]:
-    try:
-        result = lucas_lehmer_test(p)
-        print(f"p={p:3d}  -> {'PASS' if result else 'FAIL'}  (no OOB access)")
-    except IndexError as e:
-        print(f"p={p:3d}  -> *** OUT OF BOUNDS: {e} ***")
-    except RuntimeError as e:
-        print(f"p={p:3d}  -> *** NON-CONVERGENCE: {e} ***")
+# --- run against the same known test set ---
+print("Known Mersenne prime exponents (expect True):")
+for p in [2,3,5,7,13,17,19,31,61]:
+    ok = lucas_lehmer_test(p)
+    print(f"  p={p:3d}  -> {ok}  {'OK' if ok else 'FAIL <<<'}")
+
+print()
+print("Known composite exponents (expect False):")
+for p in [11,23,29,37,41,53]:
+    ok = lucas_lehmer_test(p)
+    print(f"  p={p:3d}  -> {ok}  {'OK (correctly not prime)' if not ok else 'FAIL <<<'}")

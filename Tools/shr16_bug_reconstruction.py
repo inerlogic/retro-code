@@ -2,7 +2,7 @@
 Reconstruction of the actual shr-16 bug found via Turbo Debugger.
 
 Hypothesis: "X shr 16" on a 32-bit value was returning the LOW 16 bits
-instead of the HIGH 16 bits -- i.e. behaving as if the shift never
+instead of the HIGH 16 bits, i.e. behaving as if the shift never
 happened at all (since for small values, the low word IS the value).
 
 This script reconstructs SquareWords' i=0 pass for s=4 under that exact
@@ -43,7 +43,7 @@ try:
         k += 1
         iterations += 1
 except IndexError:
-    print(f"  k={k}: IndexError -- exactly the runaway Pascal's {{$R-}} let through")
+    print(f"  k={k}: IndexError, exactly the runaway Pascal's {{$R-}} let through")
     print(f"  silently (k kept climbing past the array's real bound of 7 on real")
     print(f"  hardware, observed reaching 131 before the session ended)")
 

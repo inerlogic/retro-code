@@ -10,7 +10,7 @@ proleptic Gregorian, handles leap years correctly), then:
     total_seconds(reading) = days_from_civil(Y,M,D)*86400 + H*3600 + Mi*60 + S
     elapsed = total_seconds(reading2) - total_seconds(reading1)
 
-No manual midnight-rollover detection needed at all -- DOS's own
+No manual midnight-rollover detection needed at all, DOS's own
 date advancement handles it, we just linearize both readings the
 same way and subtract.
 """

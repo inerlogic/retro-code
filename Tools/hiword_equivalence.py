@@ -1,5 +1,5 @@
 """
-Verifies that the fix -- reading a LongInt's high word via a variant-
+Verifies that the fix, reading a LongInt's high word via a variant-
 record memory overlay (TLongWords/HiWord in the actual Pascal source)
 -- is mathematically identical to the correct "x shr 16" operation,
 across the full 32-bit range, before trusting it as a replacement for
