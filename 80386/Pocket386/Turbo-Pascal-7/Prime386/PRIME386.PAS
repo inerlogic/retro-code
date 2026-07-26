@@ -1,4 +1,4 @@
-{$Q-,R-}
+{$D+,L+,Q-,R-}
 { PRIME386.PAS -- Lucas-Lehmer CPU self-test for the Pocket 386 (no FPU) }
 { Stage 1 of 2: CPU-test core only. See README.md for design/verification notes. }
 
@@ -16,7 +16,24 @@ type
   TBigNum  = array[0..NLIMB-1]  of Word;
   TBigNum2 = array[0..NLIMB2-1] of Word;
 
+  { Overlays a LongInt with its two 16-bit halves. x86 is little-endian,
+    so Lo (declared first, lower offset) is the low word and Hi (declared
+    second, higher offset) is the high word -- this is memory layout, not
+    computation, so it bypasses whatever "X shr 16" actually compiles to. }
+  TLongWords = record
+    case Boolean of
+      True:  (L: LongInt);
+      False: (Lo, Hi: Word);
+  end;
+
 { --- small helpers --- }
+
+function HiWord(x: LongInt): Word;
+var w: TLongWords;
+begin
+  w.L := x;
+  HiWord := w.Hi;
+end;
 
 procedure ZeroBig(var b: TBigNum);
 var i: Integer;
@@ -40,6 +57,9 @@ var
   carry: LongInt;
 begin
   ZeroBig2(result);
+  WriteLn('  [after ZeroBig2: result=', result[0], ',', result[1], ',', result[2], ',', result[3],
+          ',', result[4], ',', result[5], ',', result[6], ',', result[7], ']');
+  Flush(Output);
   for i := 0 to NLIMB-1 do
   begin
     carry := 0;
@@ -47,16 +67,19 @@ begin
     begin
       prod := LongInt(a[i]) * LongInt(a[j]) + LongInt(result[i+j]) + carry;
       result[i+j] := Word(prod and $FFFF);
-      carry := prod shr 16;
+      carry := HiWord(prod);
     end;
     k := i + NLIMB;
     while carry <> 0 do
     begin
       prod := LongInt(result[k]) + (carry and $FFFF);
       result[k] := Word(prod and $FFFF);
-      carry := (carry shr 16) + (prod shr 16);
+      carry := LongInt(HiWord(carry)) + LongInt(HiWord(prod));
       Inc(k);
     end;
+    WriteLn('    [SquareWords i=', i, ': a[i]=', a[i], ' result=', result[0], ',', result[1], ',',
+            result[2], ',', result[3], ',', result[4], ',', result[5], ',', result[6], ',', result[7], ']');
+    Flush(Output);
   end;
 end;
 
@@ -72,7 +95,7 @@ begin
   begin
     s := LongInt(a[i]) + LongInt(b[i]) + carry;
     result[i] := Word(s and $FFFF);
-    carry := s shr 16;
+    carry := HiWord(s);
   end;
   AddBigTrunc := Word(carry);
 end;
@@ -255,10 +278,14 @@ begin
 
   ZeroBig(s);
   s[0] := 4;
+  WriteLn('  [after init: s=', s[0], ',', s[1], ',', s[2], ',', s[3], ']');
+  Flush(Output);
 
   for i := 1 to p - 2 do
   begin
     Write('.');
+    Flush(Output);
+    WriteLn('  [before SquareWords: s=', s[0], ',', s[1], ',', s[2], ',', s[3], ']');
     Flush(Output);
     SquareWords(s, sq);
     WriteLn('  [after SquareWords: p=', p, ']');

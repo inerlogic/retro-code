@@ -89,7 +89,9 @@ TP7-specific arithmetic semantics (shift direction, overflow-check
 default) were checked against actual Pascal language documentation,
 not assumed from general programming experience.
 
-## Open investigation: possible hardware fault (unresolved)
+## Resolved: a bug in Turbo Pascal's own runtime library, not the hardware
+
+*(For the long-form version of this story, see [THE-SHR16-SAGA.md](THE-SHR16-SAGA.md).)*
 
 While bringing up the CPU-test core on real hardware, a diagnostic
 build (temporarily printing internal state inside `ModMersenneWords`)
@@ -108,46 +110,76 @@ compilations:
   emulated hardware): four separate runs, zero corruption, all five
   tests pass every time.
 - **Real Turbo Pascal 7.0 on the physical Pocket 386**: corruption
-  reproduces reliably for a given build, but the specific wrong value
-  shifts whenever the surrounding code changes (145 -> 53 -> 41 across
-  three diagnostic revisions) -- consistent with a memory-layout-
-  sensitive fault rather than a fixed logic error, since the identical
-  source is correct everywhere except this one physical machine.
+  reproduced reliably for a given build, but the specific wrong value
+  shifted whenever the surrounding code changed (145 -> 53 -> 41 across
+  three diagnostic revisions).
 
-Same compiler, same source, correct in every environment except the
-physical unit. Working theory: a genuine hardware fault (bad RAM cell
-or flaky memory bus) on this specific Pocket 386, surfacing as stack
-corruption under `ModMersenneWords`'s heavier local-variable load --
-an isolated test replicating just the parameter shapes involved,
-with no other locals, did not reproduce it.
+The turning point: recompiling the identical source from scratch on a
+*second, physically different* Pocket 386 unit produced byte-for-byte
+identical wrong output to the first machine's most recent build. Two
+independent physical RAM chips producing the exact same "random"
+corruption isn't something bad hardware does -- that result is the
+signature of something fully deterministic, and ruled out a hardware
+fault as the cause.
 
-**Not yet confirmed.** Needs a same-binary run on the second Pocket
-386 unit (busy at time of writing) to distinguish a fault specific to
-this physical unit from something else. Leaving this open rather than
-closing it out -- there's a real chance this is exactly the kind of
-fault the tool exists to catch, just surfaced earlier and less
-formally than the finished memory scanner would have.
+An independent memory diagnostic (CheckIt) did separately confirm a
+real, unrelated extended-memory parity fault on the first unit (see
+below) -- a genuine hardware issue, just not the one causing this bug.
+
+Turbo Debugger (once actually located -- it had been present the whole
+time) made the real cause visible directly: a loop counter (`k`) that
+should never exceed 7 was observed climbing past 130 in real time,
+because a `carry` variable held **16** at a point where hand-verified
+arithmetic said it should be exactly **0**. Disassembling the
+responsible line -- `carry := prod shr 16` -- showed it wasn't a shift
+instruction at all, but a far call into Turbo Pascal's own
+(unsymboled, precompiled) runtime library at `455C:08B8`. That routine
+appears to return the wrong 16-bit half of a 32-bit value on this
+specific compiler/hardware combination, for a plain 32-bit
+shift-by-16 -- an operation used constantly throughout the bignum code.
+
+**The fix**: bypass the runtime call entirely using a variant record
+(`TLongWords`) to read a `LongInt`'s high word directly via memory
+layout instead of via `shr 16`. Verified bit-identical to the correct
+`shr 16` result across 20,000 random 32-bit values in Python, then
+confirmed on real hardware: a full run (all five test exponents,
+1,352 lines of diagnostic trace) came back completely clean, with
+every intermediate value matching hand-verified math from earlier in
+this investigation.
+
+## Hardware finding, independent of the above (still worth knowing)
+
+CheckIt (the real, period-appropriate DOS diagnostic, not the
+unrelated modern Windows product of the same name) found a genuine,
+reproducible extended-memory parity fault on the first Pocket 386
+unit -- consistently on bit 3, at addresses sharing an identical
+low-order offset (`xxx704h`), across dozens of hits in a full test
+pass. This is unrelated to the bug above (which lived in conventional
+memory, in the stack) but is a real, separate hardware issue on that
+specific unit, worth factoring in if that machine is used for
+anything that touches extended memory (Windows, XMS-using software).
+The second unit's quick CheckIt test came back clean; a full test on
+it, for a fair comparison, is still outstanding.
 
 ## Status
 
-**Stage 1 of 2**, CPU-test core only -- `PRIME386.PAS` currently
-contains just the bignum/Lucas-Lehmer engine and a test harness that
-runs the known exponent set and prints PASS/FAIL. Compiles and runs
-on the physical Pocket 386, but currently produces the corruption
-described above under diagnostic builds -- see "Open investigation."
+**Stage 1 of 2, complete and confirmed.** `PRIME386.PAS` contains the
+bignum/Lucas-Lehmer engine and a test harness running the known
+exponent set. Compiles and runs clean on the physical Pocket 386 --
+all five test cases pass, verified against a full diagnostic trace.
 No XMS module, menu, elapsed-time display, or exit-summary logging
-yet -- those are next, once the hardware question above is resolved
-one way or the other.
+yet -- those are next.
 
 ## Next steps
 
-- Resolve the open hardware question above (second-unit test).
 - Add the XMS extended-memory scanner module.
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add the two-mode menu with stop/switch, and exit-summary logging
   (final results only -- no periodic writes, out of respect for the
   CF card).
 - v2: march-algorithm memory patterns, for coupling-fault coverage.
+- Optional: full CheckIt test on the second unit, for a fair
+  comparison against the first unit's confirmed extended-memory fault.
 
 ## Version history
 
@@ -158,5 +190,13 @@ one way or the other.
   parameter value. Ruled out the algorithm and the source (Python
   re-verification, Free Pascal, and DOSBox-hosted real TP7 all run it
   correctly) -- left open as a likely physical hardware fault pending
-  a same-binary test on the second unit. See "Open investigation"
-  above.
+  a same-binary test on the second unit.
+- Second unit produced byte-identical corruption to the first, ruling
+  out a hardware cause. Turbo Debugger traced the actual root cause to
+  Turbo Pascal's own runtime library returning the wrong half of a
+  32-bit value for `shr 16`. Fixed by bypassing the runtime call
+  entirely with a variant-record memory overlay (`TLongWords`/
+  `HiWord`). Confirmed clean: all five test exponents pass, full
+  diagnostic trace matches hand-verified arithmetic throughout. Stage
+  1 complete. See "Resolved" above, or
+  [THE-SHR16-SAGA.md](THE-SHR16-SAGA.md) for the full story.
