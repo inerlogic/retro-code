@@ -392,13 +392,17 @@ begin
 end;
 
 { ---------------------------- menu option 3 ---------------------------- }
-{ XMS extended-memory scanner. UNTESTED ON REAL HARDWARE, there is no  }
-{ TP7 compiler available to build/run this before hand-off, so treat    }
-{ every AH function number, register convention, and the far-call       }
-{ mechanics below as reasoned-through, not confirmed. Likeliest places   }
-{ to look first if it misbehaves: the exact XMS AH codes, and whether   }
-{ the CALL DWORD PTR XMSEntry far-call mechanics actually match what    }
-{ this specific driver/BIOS expects. }
+{ XMS extended-memory scanner. The v1 fill/read-back path (0xAA/0x55)   }
+{ is confirmed clean on real hardware, including coverage of the first  }
+{ unit's known CheckIt-confirmed parity fault, see TECHNICAL.md. The v2 }
+{ patterns added below (walking-bit, address-in-address, March C-) are  }
+{ NOT yet run on real hardware, there is no TP7 compiler available in   }
+{ this sandbox, so treat their register conventions and far-call        }
+{ mechanics as reasoned-through and Python-verified at the algorithm    }
+{ level, not hardware-confirmed. Likeliest places to look first if they }
+{ misbehave: the exact XMS AH codes, and whether the CALL DWORD PTR     }
+{ XMSEntry far-call mechanics match what this specific driver expects,  }
+{ same caveat that applied to v1 before its own hardware confirmation. }
 
 var
   XMSEntry: Pointer;          { far entry point of the XMS driver }
@@ -479,26 +483,29 @@ begin
   end;
 end;
 
-{ Fills a 1KB conventional buffer, moves it up to extended memory at    }
-{ ByteOffset via MoveRec (global, see note above), reads it back into a }
-{ second buffer, and compares. }
+{ Chunk-level test functions below all move data through a 1 KB         }
+{ conventional buffer to/from extended memory at ByteOffset via MoveRec }
+{ (global, see note above), then compare. XMSMoveUp/XMSMoveDown do the  }
+{ raw move in each direction; everything else is built on top of them. }
 const
   ChunkWords = 512;  { 1 KB per chunk }
 type
   TChunkBuf = array[0..ChunkWords-1] of Word;
 var
-  ChunkBuf: TChunkBuf;
+  ChunkBuf: TChunkBuf;  { source buffer for conventional -> XMS moves }
+  CheckBuf: TChunkBuf;  { destination buffer for XMS -> conventional moves }
+                        { both global for the same reason as MoveRec/     }
+                        { AllocHandle above: inline asm needs a plain      }
+                        { DS-relative address, not a var-parameter's extra }
+                        { level of indirection. }
 
-function TestChunk(Handle: Word; ByteOffset: LongInt; Pattern: Word): Boolean;
+{ Raw one-chunk XMS moves, factored out of the v1 TestChunk so the v2   }
+{ patterns below (which need read-then-write, not just write-then-read)}
+{ can reuse the same two move directions instead of duplicating the asm.}
+function XMSMoveUp(Handle: Word; ByteOffset: LongInt): Boolean;
 var
-  i: Integer;
-  Check: TChunkBuf;
   MoveAX: Word;
-  okWrite, okRead, okCompare: Boolean;
 begin
-  for i := 0 to ChunkWords-1 do ChunkBuf[i] := Pattern;
-
-  { conventional -> XMS }
   MoveRec.Length       := ChunkWords * 2;
   MoveRec.SourceHandle := 0;
   MoveRec.SourceOffset := LongInt(Seg(ChunkBuf)) shl 16 + Ofs(ChunkBuf);
@@ -512,15 +519,18 @@ begin
     mov  MoveAX, ax
     pop  si
   end;
-  okWrite := (MoveAX = 1);
+  XMSMoveUp := (MoveAX = 1);
+end;
 
-  { XMS -> conventional (read back) }
-  for i := 0 to ChunkWords-1 do Check[i] := 0;
+function XMSMoveDown(Handle: Word; ByteOffset: LongInt): Boolean;
+var
+  MoveAX: Word;
+begin
   MoveRec.Length       := ChunkWords * 2;
   MoveRec.SourceHandle := Handle;
   MoveRec.SourceOffset := ByteOffset;
   MoveRec.DestHandle   := 0;
-  MoveRec.DestOffset   := LongInt(Seg(Check)) shl 16 + Ofs(Check);
+  MoveRec.DestOffset   := LongInt(Seg(CheckBuf)) shl 16 + Ofs(CheckBuf);
   asm
     push si
     lea  si, MoveRec
@@ -529,17 +539,460 @@ begin
     mov  MoveAX, ax
     pop  si
   end;
-  okRead := (MoveAX = 1);
+  XMSMoveDown := (MoveAX = 1);
+end;
+
+{ v1: write Pattern to every word in the chunk, read it back, compare. }
+function TestChunkConst(Handle: Word; ByteOffset: LongInt; Pattern: Word): Boolean;
+var
+  i: Integer;
+  okWrite, okRead, okCompare: Boolean;
+begin
+  for i := 0 to ChunkWords-1 do ChunkBuf[i] := Pattern;
+  okWrite := XMSMoveUp(Handle, ByteOffset);
+
+  for i := 0 to ChunkWords-1 do CheckBuf[i] := 0;
+  okRead := XMSMoveDown(Handle, ByteOffset);
 
   okCompare := True;
   for i := 0 to ChunkWords-1 do
-    if Check[i] <> Pattern then okCompare := False;
+    if CheckBuf[i] <> Pattern then okCompare := False;
 
-  TestChunk := okWrite and okRead and okCompare;
+  TestChunkConst := okWrite and okRead and okCompare;
+end;
+
+{ v2: address-in-address. Each word gets its own byte offset (low 16   }
+{ bits) as data, instead of a chunk-wide constant, so a decode fault    }
+{ that silently redirects one word's write to a different word within  }
+{ the SAME chunk becomes visible on readback, something a uniform fill  }
+{ pattern can't distinguish from a correct write since every word looks }
+{ the same either way. Caveat, confirmed in Python before writing this  }
+{ (addr_pattern_verify.py): the low-16-bits truncation repeats every    }
+{ 64 KB, so it can't tell apart two words exactly a 64 KB-multiple      }
+{ apart, fine here since CheckIt's fault bands were under 100 KB wide,  }
+{ well inside one 64 KB window where the pattern is a true bijection.   }
+{ Bigger caveat, also confirmed in Python (pascal_translit_verify.py):  }
+{ because this test writes-then-immediately-reads each chunk exactly    }
+{ once and never revisits it, it CANNOT catch coupling between two      }
+{ different chunks, in either aggressor/victim order, since there is no}
+{ second pass left to expose a corruption written after a chunk's own   }
+{ check already passed. That gap is real, not hypothetical, injecting   }
+{ the fault caught it clean both directions. March C- below is what     }
+{ actually covers cross-chunk coupling, via its repeated read-before-   }
+{ write sweeps; this test's real job is address/decode integrity within}
+{ a chunk, not coupling between chunks. }
+function TestChunkAddr(Handle: Word; ByteOffset: LongInt): Boolean;
+var
+  i: Integer;
+  okWrite, okRead, okCompare: Boolean;
+  expected: Word;
+begin
+  for i := 0 to ChunkWords-1 do
+    ChunkBuf[i] := Word(ByteOffset + LongInt(i) * 2);
+  okWrite := XMSMoveUp(Handle, ByteOffset);
+
+  for i := 0 to ChunkWords-1 do CheckBuf[i] := 0;
+  okRead := XMSMoveDown(Handle, ByteOffset);
+
+  okCompare := True;
+  for i := 0 to ChunkWords-1 do
+  begin
+    expected := Word(ByteOffset + LongInt(i) * 2);
+    if CheckBuf[i] <> expected then okCompare := False;
+  end;
+
+  TestChunkAddr := okWrite and okRead and okCompare;
+end;
+
+{ v2: March C- primitives, chunk-granularity. A true cell-level march   }
+{ would need one XMS move per word, impractically slow for a multi-MB   }
+{ block on a 386SX/40 with no FPU, so each 1 KB chunk stands in as one  }
+{ march "cell." This can't catch coupling between two words inside the  }
+{ same chunk (they're always written/read together in bulk), but it     }
+{ does exercise the ordered read-verify-then-write sweeps across chunks }
+{ and addresses that a static fill/read-back pass never does, which is  }
+{ exactly the class of test March C- is verified against in             }
+{ march_verify.py (stuck-at, coupling, and address-alias faults all     }
+{ detected there before this was written). }
+function MarchWrite(Handle: Word; ByteOffset: LongInt; WriteVal: Word): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to ChunkWords-1 do ChunkBuf[i] := WriteVal;
+  MarchWrite := XMSMoveUp(Handle, ByteOffset);
+end;
+
+function MarchReadWrite(Handle: Word; ByteOffset: LongInt; ExpectBefore, WriteAfter: Word): Boolean;
+var
+  i: Integer;
+  okRead, okCompare: Boolean;
+begin
+  for i := 0 to ChunkWords-1 do CheckBuf[i] := 0;
+  okRead := XMSMoveDown(Handle, ByteOffset);
+
+  okCompare := True;
+  for i := 0 to ChunkWords-1 do
+    if CheckBuf[i] <> ExpectBefore then okCompare := False;
+
+  for i := 0 to ChunkWords-1 do ChunkBuf[i] := WriteAfter;
+  MarchReadWrite := okRead and okCompare and XMSMoveUp(Handle, ByteOffset);
+end;
+
+function MarchRead(Handle: Word; ByteOffset: LongInt; ExpectVal: Word): Boolean;
+var
+  i: Integer;
+  okRead, okCompare: Boolean;
+begin
+  for i := 0 to ChunkWords-1 do CheckBuf[i] := 0;
+  okRead := XMSMoveDown(Handle, ByteOffset);
+
+  okCompare := True;
+  for i := 0 to ChunkWords-1 do
+    if CheckBuf[i] <> ExpectVal then okCompare := False;
+
+  MarchRead := okRead and okCompare;
+end;
+
+{ Centers "test N/Total: <desc>" on its own 80-column line. Used between  }
+{ every fill pattern, the addr-in-addr pass, and each March phase, so a   }
+{ long overnight run always shows which of the 41 steps per block is     }
+{ running, not just a pattern name buried in a wall of dots. }
+const
+  ScreenWidth = 80;
+
+function Spaces(n: Integer): string;
+var
+  s: string;
+  i: Integer;
+begin
+  s := '';
+  for i := 1 to n do s := s + ' ';
+  Spaces := s;
+end;
+
+procedure PrintTestHeader(testNum, totalTests: Integer; desc: string);
+var
+  numStr, totalStr, hdr: string;
+  padLen: Integer;
+begin
+  Str(testNum, numStr);
+  Str(totalTests, totalStr);
+  hdr := 'test ' + numStr + '/' + totalStr + ': ' + desc;
+  padLen := (ScreenWidth - Length(hdr)) div 2;
+  if padLen < 0 then padLen := 0;
+  WriteLn;
+  WriteLn(Spaces(padLen) + hdr);
+end;
+
+{ LongInt -> hex string, no leading zeros, no '0x'/'h' (caller adds that). }
+{ Used so fault addresses print in the same hex style CheckIt itself uses  }
+{ (e.g. "401704h"), letting a fault reported here be compared directly to  }
+{ TECHNICAL.md's known bands without doing the conversion by hand.        }
+function HexStr(v: LongInt): string;
+const
+  digits: array[0..15] of Char = '0123456789ABCDEF';
+var
+  s: string;
+  rem: LongInt;
+begin
+  if v = 0 then s := '0'
+  else
+  begin
+    s := '';
+    while v > 0 do
+    begin
+      rem := v mod 16;
+      s := digits[rem] + s;
+      v := v div 16;
+    end;
+  end;
+  HexStr := s;
+end;
+
+{ Per-test fault log: which chunk offsets failed, not just a dot/X count.  }
+{ Capped at MaxLoggedFaults so a badly-faulty run can't blow past however  }
+{ much string-building the screen can usefully show; FaultOverflow flags   }
+{ when that cap was hit so the printout says so rather than silently      }
+{ dropping faults. Offsets are block-relative (0 = start of the grabbed   }
+{ XMS block); PrintFaultLog also shows offset + 100000h as an ESTIMATED    }
+{ absolute physical address, valid only under the same assumption already }
+{ noted in TECHNICAL.md: that the block's offset 0 lines up with the start}
+{ of usable extended memory, i.e. this is the normal single-block case,   }
+{ not a guarantee once real fragmentation is in play. }
+const
+  MaxLoggedFaults = 40;
+var
+  FaultOffsets:  array[1..MaxLoggedFaults] of LongInt;
+  FaultLogCount: Integer;
+  FaultOverflow: Boolean;
+
+procedure ResetFaultLog;
+begin
+  FaultLogCount := 0;
+  FaultOverflow := False;
+end;
+
+procedure LogFault(ByteOffset: LongInt);
+begin
+  if FaultLogCount < MaxLoggedFaults then
+  begin
+    Inc(FaultLogCount);
+    FaultOffsets[FaultLogCount] := ByteOffset;
+  end
+  else
+    FaultOverflow := True;
+end;
+
+{ Zero-pads a Word to 2 digits for timestamp formatting (e.g. 9 -> '09'). }
+function Pad2(v: Word): string;
+var
+  t: string;
+begin
+  Str(v, t);
+  if Length(t) < 2 then t := '0' + t;
+  Pad2 := t;
+end;
+
+{ MM/DD/YYYY HH:MM:SS, via DOS's own clock (Dos unit, already in uses). }
+function TimestampStr: string;
+var
+  h, m, s, hund: Word;
+  yy, mo, dd, dow: Word;
+  yyStr: string;
+begin
+  GetTime(h, m, s, hund);
+  GetDate(yy, mo, dd, dow);
+  Str(yy, yyStr);
+  TimestampStr := Pad2(mo) + '/' + Pad2(dd) + '/' + yyStr + ' ' +
+                  Pad2(h) + ':' + Pad2(m) + ':' + Pad2(s);
+end;
+
+{ On-disk fault log. Appends across runs so a multi-day sweep builds one  }
+{ running history rather than overwriting itself; errors only, nothing   }
+{ is ever written for a clean pass, so a long overnight run that finds    }
+{ nothing leaves the log untouched, no periodic writes to wear out a CF   }
+{ card described elsewhere as "of dubious origin." If the file can't be   }
+{ opened or a write ever fails, logging is silently disabled for the rest }
+{ of the run rather than crashing the scan over a logging problem, the    }
+{ on-screen output already carries the same information either way. }
+const
+  LogFileName = 'XMSFAULT.LOG';
+var
+  LogFile: Text;
+  LogAvailable: Boolean;
+
+procedure OpenFaultLog;
+begin
+  Assign(LogFile, LogFileName);
+  {$I-}
+  Append(LogFile);
+  {$I+}
+  if IOResult <> 0 then
+  begin
+    {$I-}
+    Rewrite(LogFile);
+    {$I+}
+    LogAvailable := (IOResult = 0);
+  end
+  else
+    LogAvailable := True;
+end;
+
+procedure CloseFaultLog;
+begin
+  if LogAvailable then
+  begin
+    {$I-}
+    Close(LogFile);
+    {$I+}
+  end;
+end;
+
+procedure PrintFaultLog(BlockNum, TestNum, TotalTests: Integer; Desc: string);
+var
+  i: Integer;
+  overflowMark: string;
+begin
+  if FaultLogCount = 0 then
+  begin
+    WriteLn('  0 faults');
+    Exit;
+  end;
+
+  Write('  ', FaultLogCount);
+  if FaultOverflow then Write('+');
+  WriteLn(' fault(s):');
+  for i := 1 to FaultLogCount do
+  begin
+    WriteLn('    offset ', FaultOffsets[i], ' bytes (', FaultOffsets[i] div 1024,
+            ' KB into block)  est. abs. addr ', HexStr(FaultOffsets[i] + $100000), 'h');
+  end;
+  if FaultOverflow then
+    WriteLn('    (', MaxLoggedFaults, '+ faults, list capped, more occurred)');
+
+  { Mirror to disk, errors only, never called when FaultLogCount = 0 above. }
+  if LogAvailable then
+  begin
+    if FaultOverflow then overflowMark := '+' else overflowMark := '';
+    {$I-}
+    WriteLn(LogFile, TimestampStr, '  block ', BlockNum, ', test ', TestNum, '/',
+            TotalTests, ' (', Desc, '): ', FaultLogCount, overflowMark, ' fault(s)');
+    for i := 1 to FaultLogCount do
+      WriteLn(LogFile, '    offset ', FaultOffsets[i], ' bytes (',
+              FaultOffsets[i] div 1024, ' KB into block)  est. abs. addr ',
+              HexStr(FaultOffsets[i] + $100000), 'h');
+    if FaultOverflow then
+      WriteLn(LogFile, '    (', MaxLoggedFaults, '+ faults, list capped, more occurred)');
+    {$I+}
+    if IOResult <> 0 then LogAvailable := False;
+  end;
+end;
+
+{ March C-: w0; asc(r0,w1); asc(r1,w0); desc(r0,w1); desc(r1,w0); r0.   }
+{ Standard 6-element sequence, catches address faults, stuck-at faults, }
+{ transition faults, and (some) coupling faults. Progress is printed    }
+{ per phase rather than one running line, since a fault caught in, say, }
+{ M3 but not M1 is itself diagnostic information, worth keeping visible }
+{ rather than folding into a single pass/fail count. }
+procedure RunMarchBlock(Handle: Word; NumChunks: LongInt; var faults: LongInt;
+                         var stopRequested: Boolean; var testNum: Integer;
+                         totalTests: Integer; BlockNum: Integer);
+var
+  c: LongInt;
+  addr: LongInt;
+  f: LongInt;
+
+  procedure PollESC;
+  begin
+    if KeyPressed then
+      if ReadKey = #27 then stopRequested := True;
+  end;
+
+begin
+  Inc(testNum);
+  PrintTestHeader(testNum, totalTests, 'March C- M0 (w0) asc');
+  ResetFaultLog;
+  f := 0; c := 0;
+  while (c < NumChunks) and not stopRequested do
+  begin
+    addr := c * 1024;
+    if MarchWrite(Handle, addr, 0) then Write('.')
+    else begin Write('X'); Inc(f); LogFault(addr); end;
+    PollESC;
+    Inc(c);
+  end;
+  WriteLn; Inc(faults, f); PrintFaultLog(BlockNum, testNum, totalTests, 'March C- M0 (w0) asc');
+
+  Inc(testNum);
+  PrintTestHeader(testNum, totalTests, 'March C- M1 (r0,w1) asc');
+  ResetFaultLog;
+  f := 0; c := 0;
+  while (c < NumChunks) and not stopRequested do
+  begin
+    addr := c * 1024;
+    if MarchReadWrite(Handle, addr, 0, 1) then Write('.')
+    else begin Write('X'); Inc(f); LogFault(addr); end;
+    PollESC;
+    Inc(c);
+  end;
+  WriteLn; Inc(faults, f); PrintFaultLog(BlockNum, testNum, totalTests, 'March C- M1 (r0,w1) asc');
+
+  Inc(testNum);
+  PrintTestHeader(testNum, totalTests, 'March C- M2 (r1,w0) asc');
+  ResetFaultLog;
+  f := 0; c := 0;
+  while (c < NumChunks) and not stopRequested do
+  begin
+    addr := c * 1024;
+    if MarchReadWrite(Handle, addr, 1, 0) then Write('.')
+    else begin Write('X'); Inc(f); LogFault(addr); end;
+    PollESC;
+    Inc(c);
+  end;
+  WriteLn; Inc(faults, f); PrintFaultLog(BlockNum, testNum, totalTests, 'March C- M2 (r1,w0) asc');
+
+  Inc(testNum);
+  PrintTestHeader(testNum, totalTests, 'March C- M3 (r0,w1) desc');
+  ResetFaultLog;
+  f := 0; c := NumChunks - 1;
+  while (c >= 0) and not stopRequested do
+  begin
+    addr := c * 1024;
+    if MarchReadWrite(Handle, addr, 0, 1) then Write('.')
+    else begin Write('X'); Inc(f); LogFault(addr); end;
+    PollESC;
+    Dec(c);
+  end;
+  WriteLn; Inc(faults, f); PrintFaultLog(BlockNum, testNum, totalTests, 'March C- M3 (r0,w1) desc');
+
+  Inc(testNum);
+  PrintTestHeader(testNum, totalTests, 'March C- M4 (r1,w0) desc');
+  ResetFaultLog;
+  f := 0; c := NumChunks - 1;
+  while (c >= 0) and not stopRequested do
+  begin
+    addr := c * 1024;
+    if MarchReadWrite(Handle, addr, 1, 0) then Write('.')
+    else begin Write('X'); Inc(f); LogFault(addr); end;
+    PollESC;
+    Dec(c);
+  end;
+  WriteLn; Inc(faults, f); PrintFaultLog(BlockNum, testNum, totalTests, 'March C- M4 (r1,w0) desc');
+
+  Inc(testNum);
+  PrintTestHeader(testNum, totalTests, 'March C- M5 (r0) asc');
+  ResetFaultLog;
+  f := 0; c := 0;
+  while (c < NumChunks) and not stopRequested do
+  begin
+    addr := c * 1024;
+    if MarchRead(Handle, addr, 0) then Write('.')
+    else begin Write('X'); Inc(f); LogFault(addr); end;
+    PollESC;
+    Inc(c);
+  end;
+  WriteLn; Inc(faults, f); PrintFaultLog(BlockNum, testNum, totalTests, 'March C- M5 (r0) asc');
 end;
 
 const
   MaxXMSBlocks = 32;  { safety cap in case free XMS is heavily fragmented }
+  MaxPatterns  = 34;  { 0xAA, 0x55, 16 walking-1, 16 walking-0 }
+  TotalTestSteps = MaxPatterns + 7;  { + addr-in-addr + March C-'s 6 phases }
+
+var
+  patterns:   array[1..MaxPatterns] of Word;
+  patName:    array[1..MaxPatterns] of string[16];
+  numPatterns: Integer;
+
+{ Builds the const-fill pattern set. A loop rather than 34 literal      }
+{ entries, both easier to check by eye and easier to extend if another  }
+{ pattern class gets added later. }
+procedure InitPatterns;
+var
+  bit: Integer;
+  bs:  string[4];
+begin
+  numPatterns := 0;
+
+  Inc(numPatterns); patterns[numPatterns] := $AAAA; patName[numPatterns] := '0xAA fill';
+  Inc(numPatterns); patterns[numPatterns] := $5555; patName[numPatterns] := '0x55 fill';
+
+  for bit := 0 to 15 do
+  begin
+    Inc(numPatterns);
+    patterns[numPatterns] := Word(1) shl bit;
+    Str(bit, bs);
+    patName[numPatterns] := 'walk-1 bit ' + bs;
+  end;
+
+  for bit := 0 to 15 do
+  begin
+    Inc(numPatterns);
+    patterns[numPatterns] := $FFFF xor (Word(1) shl bit);
+    Str(bit, bs);
+    patName[numPatterns] := 'walk-0 bit ' + bs;
+  end;
+end;
 
 procedure RunXMSScanner;
 var
@@ -551,15 +1004,20 @@ var
   chunk, numChunks: LongInt;
   faults: LongInt;
   patternIdx: Integer;
-  patterns: array[1..2] of Word;
-  patName: array[1..2] of string[12];
+  testNum: Integer;
   ok, stopRequested, allocFailed: Boolean;
   b: Integer;
 begin
   WriteLn;
-  WriteLn('--- XMS Scanner (v1: fill/read-back patterns) ---');
-  WriteLn('NOTE: not yet confirmed on real hardware, report any oddities.');
+  WriteLn('--- XMS Scanner (v2: fill/read-back, walking-bit, addr-in-addr, March C-) ---');
+  WriteLn('NOTE: only the v1 fill/read-back patterns (0xAA/0x55) are confirmed on');
+  WriteLn('real hardware so far. The rest are new, report any oddities.');
+  WriteLn('Faults (only faults, never clean passes) are also logged to ', LogFileName, '.');
   WriteLn;
+
+  OpenFaultLog;
+  if not LogAvailable then
+    WriteLn('(Could not open ', LogFileName, ', continuing without file logging.)');
 
   if not XMSPresent then
   begin
@@ -567,6 +1025,7 @@ begin
     WriteLn('Load HIMEM.SYS or an equivalent XMS driver and try again.');
     WriteLn('Press any key to return to menu.');
     ReadKey;
+    CloseFaultLog;
     Exit;
   end;
 
@@ -602,6 +1061,7 @@ begin
     WriteLn('Nothing usable to test.');
     WriteLn('Press any key to return to menu.');
     ReadKey;
+    CloseFaultLog;
     Exit;
   end;
 
@@ -610,8 +1070,7 @@ begin
     WriteLn('(Stopped grabbing after an allocate failure, testing what was already grabbed.)');
   WriteLn;
 
-  patterns[1] := $AAAA; patName[1] := '0xAA fill';
-  patterns[2] := $5555; patName[2] := '0x55 fill';
+  InitPatterns;
 
   faults := 0;
   stopRequested := False;
@@ -622,19 +1081,24 @@ begin
     WriteLn('Block ', b, ' of ', NumBlocks, ' (', BlockKB[b], ' KB, handle=',
             BlockHandle[b], '):');
     numChunks := BlockKB[b];   { 1 KB per chunk }
+    testNum := 0;
 
-    for patternIdx := 1 to 2 do
+    { v1 + walking-bit: constant fill per pass, checked against itself. }
+    for patternIdx := 1 to numPatterns do
     begin
       if stopRequested then Break;
-      Write('  ', patName[patternIdx], ': ');
+      Inc(testNum);
+      PrintTestHeader(testNum, TotalTestSteps, patName[patternIdx]);
+      ResetFaultLog;
       for chunk := 0 to numChunks - 1 do
       begin
-        ok := TestChunk(BlockHandle[b], chunk * 1024, patterns[patternIdx]);
+        ok := TestChunkConst(BlockHandle[b], chunk * 1024, patterns[patternIdx]);
         if ok then Write('.')
         else
         begin
           Write('X');
           Inc(faults);
+          LogFault(chunk * 1024);
         end;
 
         if KeyPressed then
@@ -643,20 +1107,55 @@ begin
         if stopRequested then Break;
       end;
       WriteLn;
+      PrintFaultLog(b, testNum, TotalTestSteps, patName[patternIdx]);
     end;
+
+    { v2: address-in-address, each word carries its own offset as data. }
+    if not stopRequested then
+    begin
+      Inc(testNum);
+      PrintTestHeader(testNum, TotalTestSteps, 'addr-in-addr');
+      ResetFaultLog;
+      for chunk := 0 to numChunks - 1 do
+      begin
+        ok := TestChunkAddr(BlockHandle[b], chunk * 1024);
+        if ok then Write('.')
+        else
+        begin
+          Write('X');
+          Inc(faults);
+          LogFault(chunk * 1024);
+        end;
+
+        if KeyPressed then
+          if ReadKey = #27 then stopRequested := True;
+
+        if stopRequested then Break;
+      end;
+      WriteLn;
+      PrintFaultLog(b, testNum, TotalTestSteps, 'addr-in-addr');
+    end;
+
+    { v2: March C-, ordered read/write sweeps for coupling and address faults. }
+    if not stopRequested then
+      RunMarchBlock(BlockHandle[b], numChunks, faults, stopRequested, testNum,
+                    TotalTestSteps, b);
   end;
 
   WriteLn;
   if stopRequested then
     WriteLn('Run stopped by user request.')
   else
-    WriteLn('Walking-bit and address-in-address patterns: not yet implemented (planned v2).');
+    WriteLn('All v1 and v2 patterns complete: fill/read-back, walking-bit,');
+  if not stopRequested then
+    WriteLn('address-in-address, and March C-.');
   WriteLn('Blocks tested: ', NumBlocks, '   Total KB tested: ', TotalKBGrabbed,
           '   Total faults: ', faults);
 
   { Always free everything grabbed, regardless of how we got here. }
   for b := 1 to NumBlocks do
     XMSFree(BlockHandle[b]);
+  CloseFaultLog;
 
   WriteLn;
   WriteLn('Press any key to return to menu.');

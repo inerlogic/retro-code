@@ -46,22 +46,44 @@ out, using pure integer/bignum arithmetic instead.
   expected composite); any mismatch either direction means a hardware
   fault. Loops until ESC. Confirmed working on real hardware: over
   100 sweeps, clean the whole way through, zero mismatches.
-- **XMS Scanner**: extended-memory scan using simple fill/read-back
-  patterns (0xAA/0x55), separate from the CPU tests since the tiny
-  bignum footprint does essentially nothing to stress RAM on its own.
-  One compile-time bug found and fixed along the way (a `var`
-  parameter written to from inline asm needed an extra level of
-  indirection that the compiler couldn't generate in one step;
-  replaced with a global variable instead). Confirmed working on real
-  hardware: a full run across the largest available XMS block came
-  back with zero faults on both patterns. Reworked to grab every free
-  block, largest-first, until none remain, rather than only the
+- **XMS Scanner**: extended-memory scan, separate from the CPU tests
+  since the tiny bignum footprint does essentially nothing to stress
+  RAM on its own. One compile-time bug found and fixed along the way
+  (a `var` parameter written to from inline asm needed an extra level
+  of indirection that the compiler couldn't generate in one step;
+  replaced with a global variable instead). Reworked to grab every
+  free block, largest-first, until none remain, rather than only the
   single largest one, so fragmented free memory gets covered too;
   confirmed functionally correct on non-fragmented single-block cases,
   the actual multi-block aggregation path hasn't been exercised on
-  real fragmented memory yet. Walking-bit and address-in-address
-  patterns, plus a proper march algorithm for coupling faults, are
-  deferred to v2.
+  real fragmented memory yet.
+
+  **v1 patterns** (simple fill/read-back, 0xAA/0x55): confirmed working
+  on real hardware, a full run across the largest available XMS block
+  came back with zero faults on both patterns.
+
+  **v2 patterns** (added after the faulty-unit result below suggested
+  the simple fill/read-back pattern may not expose every fault class):
+  walking-1/walking-0 (all 16 bit positions, isolates a single bit per
+  word instead of relying on 0xAA/0x55's fixed alternation), address-
+  in-address (each word's data is its own byte offset, so a decode
+  fault that silently redirects a write within the same chunk shows up
+  on readback), and March C- (the standard 6-element march sequence,
+  w0/r0w1/r1w0 ascending then descending/r0, adapted to chunk rather
+  than word granularity since a true per-word XMS move for a multi-MB
+  block would be impractically slow on this CPU). All three algorithms
+  were verified in Python against injected fault models before being
+  written in Pascal (`march_verify.py`, `addr_pattern_verify.py`,
+  `pascal_translit_verify.py`, a direct transliteration of the actual
+  Pascal structure, not just the underlying algorithm, following the
+  same methodology used for the bignum arithmetic). That transliteration
+  check caught a real, worth-knowing limitation: address-in-address, as
+  a single write-then-immediately-read pass per chunk with no revisit,
+  cannot catch coupling between two different chunks in either
+  direction, only March C-'s repeated read-before-write sweeps do that;
+  address-in-address's real job is address/decode integrity within a
+  chunk, not cross-chunk coupling. None of the v2 patterns have run on
+  real hardware yet.
 
 Menu-driven, with the ability to stop a running test (ESC) and return
 to the menu to pick another mode.
@@ -227,6 +249,19 @@ block cases; the actual multi-block aggregation path hasn't been
 exercised on real fragmented memory yet. No elapsed-time display or
 exit-summary logging yet.
 
+**XMS Scanner v2 patterns (walking-bit, address-in-address, March C-),
+written and Python-verified, not yet run on real hardware.** Added in
+response to the faulty-unit result below: a confirmed hardware fault
+sat inside a fully-covered v1 fill/read-back run and still came back
+clean, suggesting the simple pattern may not expose everything CheckIt
+catches. All three algorithms were verified against injected fault
+models in Python, including a direct transliteration of the actual
+Pascal structure (not just the underlying algorithm), which is how the
+address-in-address coupling limitation noted above was found. Adds
+meaningfully to scan time (34 fill patterns instead of 2, plus a full
+address-in-address pass, plus March C-'s 6-element sweep per block),
+worth knowing before running this on an overnight burn-in.
+
 **Faulty-unit test (all three modes), passed, and coverage is now
 confirmed, not just assumed.** All three modes were run on the first
 Pocket 386 unit, the one CheckIt found a genuine extended-memory
@@ -274,15 +309,13 @@ situation.
 
 ## Next steps
 
+- Run the new XMS Scanner v2 patterns (walking-bit, address-in-address,
+  March C-) on real hardware, on both units, including the known-faulty
+  first unit specifically, to see whether any of them expose the
+  CheckIt-confirmed parity fault that the v1 fill/read-back pass didn't.
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add exit-summary logging (final results only, no periodic writes,
   out of respect for the CF card).
-- Walking-bit and address-in-address XMS patterns, plus a proper march
-  algorithm for coupling faults: bumped up in priority given the
-  faulty-unit result above. A confirmed hardware fault sat inside a
-  fully-covered fill/read-back test and still came back clean, which
-  suggests the simple pattern may not be catching what CheckIt catches
-  on this specific chip.
 
 ## Version history
 
@@ -342,3 +375,19 @@ situation.
   rather than a workaround. Preserved as `701TEST.PAS` so anyone else
   running old Borland compilers on real 386+ hardware can check their
   own.
+- Added XMS Scanner v2: walking-1/walking-0 patterns for all 16 bit
+  positions, an address-in-address pattern (each word's data is its
+  own byte offset), and a March C- implementation adapted to chunk
+  rather than word granularity. Factored the raw XMS move calls out of
+  the old single `TestChunk` into reusable `XMSMoveUp`/`XMSMoveDown`
+  functions so the new patterns (which need read-before-write, not
+  just write-then-read) could share them instead of duplicating the
+  asm. All three verified in Python against injected fault models
+  before writing any Pascal, including a direct transliteration of the
+  actual Pascal structure (`pascal_translit_verify.py`), which surfaced
+  a real limitation: address-in-address, as a single write-then-read
+  pass with no revisit, cannot catch coupling between two different
+  chunks in either direction; only March C-'s repeated read-before-
+  write sweeps do that. Documented that distinction directly in the
+  source rather than only in this file. None of the v2 patterns have
+  run on real hardware yet.

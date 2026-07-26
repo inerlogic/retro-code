@@ -12,7 +12,7 @@ the visuals rather than just running for its own sake.
   measured timing: `CycleCandidate` preserves the actual BIOS-tick count
   alongside each checkpoint's state, and `FindMu` accumulates real
   elapsed ticks during its own replay rather than estimating from the
-  original detection run's timing. CSV's third column is `MuSeconds` --
+  original detection run's timing. CSV's third column is `MuSeconds`,
   a genuine measurement, not an estimate.
 - **`HL386_Brent.pas`**, the reference version: straightforward,
   textbook two-phase Brent's algorithm, no shortcut, and still the
@@ -69,26 +69,30 @@ Elapsed time is tracked via the BIOS timer-tick counter rather than the
 system clock, since this machine's CMOS clock isn't reliable, see
 [Pocket 386](../../) for the shared hardware note on this.
 
-## Statistical analysis (seeds 1-570 sweep)
+## Statistical analysis (seeds 1-936 sweep)
 
-![Mu distribution tail analysis](mu_tail_analysis_final.png)
+![Mu distribution tail analysis](mu_tail_analysis_n936.png)
 
-Across the full 570-seed combined sweep:
+Across the full 936-seed combined sweep:
 
 - **Mu is roughly log-normally distributed.** Mean and median of
-  log(Mu) are nearly identical (7.27 vs 7.25), the signature of a
+  log(Mu) are nearly identical (7.26 vs 7.24), the signature of a
   right-skewed distribution that looks symmetric on a log scale. Raw
   Mu ranges from 318 to 6037, with most seeds converging in the
   500-2000 generation range and a long, thinning tail beyond that.
-- **Period 2 dominates overwhelmingly**: 566 of 570 seeds (99.3%)
-  settle into a period-2 oscillation. Only four seeds, 1, 26, 302,
-  and 446, land on period 6 instead; no other period appeared
-  anywhere in the sweep.
-- **A single, isolated Mu ceiling**: seed 482 is the slowest to
-  converge in the entire sweep, at Mu=6037, more than 800
+  This shape has held consistently since the very first checkpoint at
+  n=37, across six independent sample sizes along the way.
+- **Period 2 dominates overwhelmingly**: 929 of 936 seeds (99.3%)
+  settle into a period-2 oscillation. Seven seeds, 1, 26, 302, 446,
+  709, 811, and 827, land on period 6 instead; no other period has
+  appeared anywhere in the sweep so far.
+- **The Mu ceiling has held steady since seed 570.** Seed 482 is still
+  the slowest to converge in the entire sweep, at Mu=6037, 845
   generations clear of the next-highest seed (550, at Mu=5192), and
-  well over 3x the sweep's mean. The rest of the tail is comparatively
-  tightly clustered by contrast.
+  nearly 3.8x the sweep's mean. That this ceiling hasn't moved across
+  the 366 additional seeds since the last checkpoint is itself decent
+  evidence the tail isn't a heavy one, though it's not proof nothing
+  bigger exists further out.
 
 ## Oscillating structures
 
@@ -139,9 +143,10 @@ convergence, and the real tick-based `MuSeconds` has been cross-checked
 against `HL386_Brent.pas`'s `Mu` and `Period` (which match exactly for
 the same seeds, as expected from a deterministic simulation). Beyond
 that: run continuously across two separate Pocket 386 units in parallel
-over several days, covering seeds 1-570 with zero gaps and zero
-duplicates in the combined log, including multiple unattended stretches
-of 20+ hours each. One logging anomaly turned up early in this process
+over several days, covering seeds 1-936 with zero gaps in the combined
+log (one harmless duplicate pair turned up in the raw merge, identical
+in both readings, exactly as determinism predicts, and was removed),
+including multiple unattended stretches of 20+ hours each. One logging anomaly turned up early in this process
 and never recurred, see "Version history" for what happened and how it
 was chased down. The corrected interrupted-seed exit message is also
 confirmed:
@@ -205,7 +210,7 @@ Last completed seed: 2
   which is independent of the CMOS battery.
 - **A real bug: SeedVal used to advance unconditionally.** An ESC during
   FindMu (a candidate found, but interrupted before the log write) would
-  still advance SeedVal past a seed that was never actually logged --
+  still advance SeedVal past a seed that was never actually logged,
   meaning the exit message could report the wrong seed as "last
   completed." Fixed by tying the increment to a successful log write.
   The exit message itself was also reworded at the same time, from
@@ -238,7 +243,7 @@ Last completed seed: 2
 - **A logging anomaly, chased down but never conclusively explained.**
   Early in `HL386T`'s first extended run, a session that visibly
   progressed through dozens of seeds (confirmed by the seed number
-  advancing on screen) produced no new rows in `LIFELOG.CSV` at all --
+  advancing on screen) produced no new rows in `LIFELOG.CSV` at all,
   not appended, not a fresh file either. Code review turned up nothing:
   the file-open, write, and flush logic was byte-for-byte identical to
   the already-confirmed-working `HL386.pas`. Two direct hardware tests
@@ -259,5 +264,8 @@ Last completed seed: 2
   starting point, the other from a high one) specifically to build
   confidence in long unattended runs faster, and to accumulate a larger
   dataset than a single machine could in the same time. The combined
-  result: seeds 1-570, zero gaps, zero duplicates, confirmed by direct
-  inspection of the merged log.
+  result, as of the latest checkpoint: seeds 1-936, zero gaps. One
+  duplicate pair (seeds 889 and 908, likely from a small overlap near a
+  machine handoff) turned up in the raw merge; both readings were
+  byte-for-byte identical, exactly what determinism guarantees rather
+  than a real conflict, and were de-duplicated for analysis.
