@@ -262,6 +262,45 @@ meaningfully to scan time (34 fill patterns instead of 2, plus a full
 address-in-address pass, plus March C-'s 6-element sweep per block),
 worth knowing before running this on an overnight burn-in.
 
+**Address-line fault identified, and a fourth test (AddrGallop
+Scanner) added specifically to target it.** After the v2 patterns
+themselves came back clean on four separate real-hardware runs on the
+faulty unit (three unattended XMS Scanner runs plus one watched run
+that reached the exact test that had earlier caught 26 errors, without
+catching anything), CheckIt itself was run directly, first CheckIt 3.0
+(German), then CheckIt v4 (English, easier to read). Both CheckIt
+versions confirmed the same fault, and both report it under Failure
+Class "Address Lines," not a data-bit or coupling fault. Analyzing the
+actual reported addresses (50 unique addresses across CheckIt v4's
+readout) found something concrete: every single one shares the
+identical low-order remainder `0x1704` modulo `0x2000` (8192 bytes,
+which is bit 13 of the byte address), and every gap between
+consecutive failing addresses is a multiple of 8192. That's the
+signature of address bit 13 being unreliable in the affected bands,
+addresses differing only in that bit alias to the same physical cell.
+
+None of the existing tests (v1 fill/read-back, walking-bit,
+address-in-address, or March C- at chunk granularity) can actually
+detect this specific fault: they either fill an entire chunk with one
+uniform value (so two aliased addresses inside that chunk already hold
+the same value, nothing to catch) or, for address-in-address, compare
+addresses that are at most 1 KB apart, while this fault's aliasing
+distance is 8 KB, larger than the whole chunk. A new, separate test
+(**AddrGallop Scanner**, its own menu option) was added: for a
+reference word address, write a distinct marker to it and to the same
+address with one bit toggled, then read both back and confirm neither
+corrupted the other. Tests bits 11-15 (2 KB-32 KB spacing) at an
+8192-byte stride, chosen because that stride lands exactly on all of
+the real reported addresses (checked directly against the CheckIt
+readout). Needs individual word-level XMS moves rather than the bulk
+chunk moves everything else in this file uses, so it's meaningfully
+slower per byte covered and was kept out of the 41-step XMS Scanner
+sequence deliberately. Verified in Python first, including a direct
+transliteration of the actual loop structure (bounds-checking near
+block edges, the stride loop, the bit range), against injected
+bit-13-style faults and against clean memory. Not yet run on real
+hardware.
+
 **Faulty-unit test (all three modes), passed, and coverage is now
 confirmed, not just assumed.** All three modes were run on the first
 Pocket 386 unit, the one CheckIt found a genuine extended-memory
@@ -309,10 +348,15 @@ situation.
 
 ## Next steps
 
-- Run the new XMS Scanner v2 patterns (walking-bit, address-in-address,
-  March C-) on real hardware, on both units, including the known-faulty
-  first unit specifically, to see whether any of them expose the
-  CheckIt-confirmed parity fault that the v1 fill/read-back pass didn't.
+- Run the new AddrGallop Scanner on real hardware, on the known-faulty
+  first unit specifically, targeting the confirmed range (CheckIt v4's
+  actual readout spans `0x401704` to `0x467704`, roughly 4.00-4.40 MB
+  physical, as one continuous run of 8192-byte-spaced failures, not
+  clearly split into the original two-band description from the
+  earlier CheckIt 3.0 pass). This is the first test built with the
+  actual fault mechanism (an address-line alias at 8192-byte spacing)
+  in mind, rather than a general-purpose pattern, so it's the best
+  current candidate for actually reproducing what CheckIt catches.
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add exit-summary logging (final results only, no periodic writes,
   out of respect for the CF card).
@@ -391,3 +435,35 @@ situation.
   write sweeps do that. Documented that distinction directly in the
   source rather than only in this file. None of the v2 patterns have
   run on real hardware yet.
+- Added a per-test progress header (centered, its own line, "test
+  N/Total") and a per-test fault log (offset, KB into block, and an
+  estimated absolute address in CheckIt's own hex style) to the XMS
+  Scanner, plus an on-disk fault log (`XMSFAULT.LOG`, appends across
+  runs, errors only, nothing written for a clean pass).
+- Ran the v2 XMS Scanner on the known-faulty first unit: three
+  unattended runs and one watched run (specifically reaching the exact
+  test, walk-0 bit 1, that had earlier caught 26 errors) all came back
+  clean. Ran CheckIt directly instead, first 3.0 (German), then v4
+  (English, via a CD-ROM release bundling CheckIt 4 for DOS). Both
+  reproduced the fault, both reporting it under Failure Class "Address
+  Lines." Analyzed the actual reported addresses from the v4 readout
+  (50 unique addresses): all share the identical low-order remainder
+  `0x1704` modulo `0x2000` (8192 bytes, bit 13 of the byte address),
+  and every gap between consecutive failures is a multiple of 8192,
+  the signature of an unreliable address line, not a data-bit or
+  simple coupling fault. This also explains why none of the existing
+  tests caught it: the v1/walking-bit patterns fill an entire chunk
+  with one uniform value (so an alias within that chunk has nothing to
+  disagree with), and address-in-address only ever compares addresses
+  within the same 1 KB chunk, while this fault's aliasing distance is
+  8 KB. Added AddrGallop Scanner, a new, separate menu option (word-
+  level XMS moves, much slower per byte than the bulk chunk tests, so
+  deliberately kept out of the 41-step sequence): for a reference
+  address, write a marker to it and to the same address with one bit
+  toggled, then read both back and confirm neither corrupted the
+  other. Tests bits 11-15 at an 8192-byte stride, the stride chosen
+  because it lands exactly on all of the real reported addresses,
+  checked directly against the CheckIt readout. Verified in Python
+  first (`addrgallop_verify.py`, `addrgallop_pascal_translit.py`)
+  against injected bit-13-style faults, clean memory, and the actual
+  Pascal loop's boundary-skipping logic. Not yet run on real hardware.

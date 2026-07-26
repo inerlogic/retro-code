@@ -542,6 +542,67 @@ begin
   XMSMoveDown := (MoveAX = 1);
 end;
 
+{ Single-word (2-byte) XMS moves, for the address-line test below, which  }
+{ needs to touch specific individual addresses, not whole 1 KB chunks.    }
+{ Same global-buffer reasoning as ChunkBuf/CheckBuf: inline asm needs a   }
+{ plain DS-relative address. }
+var
+  WordSrcBuf: Word;
+  WordDstBuf: Word;
+
+function XMSMoveWordUp(Handle: Word; ByteOffset: LongInt; Value: Word): Boolean;
+var
+  MoveAX: Word;
+begin
+  WordSrcBuf := Value;
+  MoveRec.Length       := 2;
+  MoveRec.SourceHandle := 0;
+  MoveRec.SourceOffset := LongInt(Seg(WordSrcBuf)) shl 16 + Ofs(WordSrcBuf);
+  MoveRec.DestHandle   := Handle;
+  MoveRec.DestOffset   := ByteOffset;
+  asm
+    push si
+    lea  si, MoveRec
+    mov  ah, $0B
+    call dword ptr XMSEntry
+    mov  MoveAX, ax
+    pop  si
+  end;
+  XMSMoveWordUp := (MoveAX = 1);
+end;
+
+function XMSMoveWordDown(Handle: Word; ByteOffset: LongInt; var Value: Word): Boolean;
+var
+  MoveAX: Word;
+begin
+  WordDstBuf := 0;
+  MoveRec.Length       := 2;
+  MoveRec.SourceHandle := Handle;
+  MoveRec.SourceOffset := ByteOffset;
+  MoveRec.DestHandle   := 0;
+  MoveRec.DestOffset   := LongInt(Seg(WordDstBuf)) shl 16 + Ofs(WordDstBuf);
+  asm
+    push si
+    lea  si, MoveRec
+    mov  ah, $0B
+    call dword ptr XMSEntry
+    mov  MoveAX, ax
+    pop  si
+  end;
+  XMSMoveWordDown := (MoveAX = 1);
+  Value := WordDstBuf;
+end;
+
+{ AddrGallop: address-line test, added after CheckIt 3.0/v4 both flagged  }
+{ this hardware's fault as Failure Class "Address Lines," and the actual  }
+{ reported addresses (see TECHNICAL.md) all share the identical low-order}
+{ remainder mod 8192 bytes (0x2000 = bit 13 of the byte address), with    }
+{ every gap between failing addresses a multiple of 8192. That's the      }
+{ signature of address bit 13 being unreliable: two addresses differing   }
+{ only in that bit alias to the same physical cell, at least in the       }
+{ affected bands. TestAddrPair (which implements the actual check) is     }
+{ defined further down, after the fault-logging helpers it uses. }
+
 { v1: write Pattern to every word in the chunk, read it back, compare. }
 function TestChunkConst(Handle: Word; ByteOffset: LongInt; Pattern: Word): Boolean;
 var
@@ -741,6 +802,56 @@ begin
   end
   else
     FaultOverflow := True;
+end;
+
+{ AddrGallop: address-line test, added after CheckIt 3.0/v4 both flagged  }
+{ this hardware's fault as Failure Class "Address Lines," and the actual  }
+{ reported addresses (see TECHNICAL.md) all share the identical low-order}
+{ remainder mod 8192 bytes (0x2000 = bit 13 of the byte address), with    }
+{ every gap between failing addresses a multiple of 8192. That's the      }
+{ signature of address bit 13 being unreliable: two addresses differing   }
+{ only in that bit alias to the same physical cell, at least in the       }
+{ affected bands. Verified in Python first (addrgallop_verify.py): a      }
+{ simulated bit-13 fault localized to a band is caught cleanly, clean     }
+{ memory gives zero false positives, and a stride of 8192 bytes lands     }
+{ exactly on all of the real reported addresses checked. }
+{                                                                          }
+{ Method: pick a reference word address, write a marker to it and to the  }
+{ SAME address with one bit toggled, then read both back and confirm      }
+{ neither corrupted the other. This needs single-word XMS moves rather    }
+{ than the bulk chunk moves everything else in this file uses, so it's   }
+{ far slower per byte covered, which is why it's its own menu option      }
+{ rather than folded into the XMS Scanner's 41-step sequence. Bits 11-15  }
+{ are tested (2 KB-32 KB spacing) rather than only bit 13, as cheap        }
+{ insurance in case the exact bit differs on another run or another unit. }
+{ Known minor inefficiency, not worth the complexity to special-case:     }
+{ for the bit matching the reference stride itself (13, since stride is   }
+{ also 8192), each aliased pair gets tested twice, once from each side.   }
+const
+  AddrGallopTagRef = $A5A5;
+  AddrGallopTagTgt = $5A5A;
+
+function TestAddrPair(Handle: Word; RefOffset: LongInt; BitPos: Integer): Boolean;
+var
+  delta, tgtOffset: LongInt;
+  readBack: Word;
+  refOK, tgtOK: Boolean;
+begin
+  delta := LongInt(1) shl BitPos;
+  tgtOffset := RefOffset xor delta;
+
+  XMSMoveWordUp(Handle, RefOffset, AddrGallopTagRef);
+  XMSMoveWordUp(Handle, tgtOffset, AddrGallopTagTgt);
+
+  XMSMoveWordDown(Handle, RefOffset, readBack);
+  refOK := (readBack = AddrGallopTagRef);
+  if not refOK then LogFault(RefOffset);
+
+  XMSMoveWordDown(Handle, tgtOffset, readBack);
+  tgtOK := (readBack = AddrGallopTagTgt);
+  if not tgtOK then LogFault(tgtOffset);
+
+  TestAddrPair := refOK and tgtOK;
 end;
 
 { Zero-pads a Word to 2 digits for timestamp formatting (e.g. 9 -> '09'). }
@@ -994,6 +1105,159 @@ begin
   end;
 end;
 
+const
+  AddrGallopStride = 8192;  { bytes; matches the confirmed 8 KB/bit-13    }
+                             { periodicity, so every reference point lands}
+                             { on a fresh instance of the suspect pattern }
+  AddrGallopMinBit = 11;
+  AddrGallopMaxBit = 15;     { tests bits 11..15 (2 KB-32 KB spacing);    }
+                             { bit 13 (8 KB) is the one CheckIt's own      }
+                             { reported addresses confirm, the neighbors  }
+                             { are cheap insurance in case the exact bit  }
+                             { differs on another run or another unit.   }
+
+{ Address-line test, its own menu option rather than folded into the XMS  }
+{ Scanner's 41-step sequence, since word-level XMS moves are far slower   }
+{ per byte covered than the bulk chunk moves everything else uses; this   }
+{ is meant to be run and re-run on its own, not as part of an overnight   }
+{ sweep. Grabs XMS blocks the same way RunXMSScanner does (duplicated     }
+{ rather than factored out, so a change here can't risk the already      }
+{ hardware-confirmed block-grabbing logic there). }
+procedure RunAddrGallopScanner;
+var
+  BlockHandle: array[1..MaxXMSBlocks] of Word;
+  BlockKB:     array[1..MaxXMSBlocks] of Word;
+  NumBlocks:   Integer;
+  TotalKBGrabbed: LongInt;
+  LargestKB: Word;
+  faults: LongInt;
+  ok, stopRequested, allocFailed: Boolean;
+  b, bit, totalTests, testNum: Integer;
+  blockBytes, refOffset, tgtOffset: LongInt;
+  bs: string[4];
+  desc: string;
+begin
+  WriteLn;
+  WriteLn('--- AddrGallop Scanner (address-line test) ---');
+  WriteLn('Tests bits ', AddrGallopMinBit, '-', AddrGallopMaxBit,
+          ' at an ', AddrGallopStride, '-byte stride. Not yet run on real');
+  WriteLn('hardware; faults (only faults) are also logged to ', LogFileName, '.');
+  WriteLn;
+
+  OpenFaultLog;
+  if not LogAvailable then
+    WriteLn('(Could not open ', LogFileName, ', continuing without file logging.)');
+
+  if not XMSPresent then
+  begin
+    WriteLn('No XMS driver detected (INT 2Fh, AX=4300h did not return AL=80h).');
+    WriteLn('Load HIMEM.SYS or an equivalent XMS driver and try again.');
+    WriteLn('Press any key to return to menu.');
+    ReadKey;
+    CloseFaultLog;
+    Exit;
+  end;
+
+  GetXMSEntry;
+
+  NumBlocks := 0;
+  TotalKBGrabbed := 0;
+  allocFailed := False;
+
+  repeat
+    LargestKB := XMSQueryLargestKB;
+    if LargestKB < 1 then Break;
+    if NumBlocks >= MaxXMSBlocks then Break;
+
+    if not XMSAllocate(LargestKB) then
+    begin
+      allocFailed := True;
+      Break;
+    end;
+
+    Inc(NumBlocks);
+    BlockHandle[NumBlocks] := AllocHandle;
+    BlockKB[NumBlocks]     := LargestKB;
+    Inc(TotalKBGrabbed, LargestKB);
+  until False;
+
+  if NumBlocks = 0 then
+  begin
+    WriteLn('Nothing usable to test.');
+    WriteLn('Press any key to return to menu.');
+    ReadKey;
+    CloseFaultLog;
+    Exit;
+  end;
+
+  WriteLn('Grabbed ', NumBlocks, ' block(s), ', TotalKBGrabbed, ' KB total.');
+  if allocFailed then
+    WriteLn('(Stopped grabbing after an allocate failure, testing what was already grabbed.)');
+  WriteLn;
+
+  faults := 0;
+  stopRequested := False;
+  totalTests := AddrGallopMaxBit - AddrGallopMinBit + 1;
+
+  for b := 1 to NumBlocks do
+  begin
+    if stopRequested then Break;
+    WriteLn('Block ', b, ' of ', NumBlocks, ' (', BlockKB[b], ' KB, handle=',
+            BlockHandle[b], '):');
+    blockBytes := LongInt(BlockKB[b]) * 1024;
+    testNum := 0;
+
+    for bit := AddrGallopMinBit to AddrGallopMaxBit do
+    begin
+      if stopRequested then Break;
+      Inc(testNum);
+      Str(bit, bs);
+      desc := 'AddrGallop bit ' + bs;
+      PrintTestHeader(testNum, totalTests, desc);
+      ResetFaultLog;
+
+      refOffset := 0;
+      while (refOffset < blockBytes) and not stopRequested do
+      begin
+        tgtOffset := refOffset xor (LongInt(1) shl bit);
+        if (tgtOffset >= 0) and (tgtOffset < blockBytes) then
+        begin
+          ok := TestAddrPair(BlockHandle[b], refOffset, bit);
+          if ok then Write('.')
+          else
+          begin
+            Write('X');
+            Inc(faults);
+          end;
+        end;
+
+        if KeyPressed then
+          if ReadKey = #27 then stopRequested := True;
+
+        Inc(refOffset, AddrGallopStride);
+      end;
+      WriteLn;
+      PrintFaultLog(b, testNum, totalTests, desc);
+    end;
+  end;
+
+  WriteLn;
+  if stopRequested then
+    WriteLn('Run stopped by user request.')
+  else
+    WriteLn('AddrGallop complete (bits ', AddrGallopMinBit, '-', AddrGallopMaxBit, ').');
+  WriteLn('Blocks tested: ', NumBlocks, '   Total KB tested: ', TotalKBGrabbed,
+          '   Total faults: ', faults);
+
+  for b := 1 to NumBlocks do
+    XMSFree(BlockHandle[b]);
+  CloseFaultLog;
+
+  WriteLn;
+  WriteLn('Press any key to return to menu.');
+  ReadKey;
+end;
+
 procedure RunXMSScanner;
 var
   BlockHandle: array[1..MaxXMSBlocks] of Word;
@@ -1172,7 +1436,8 @@ begin
   WriteLn('  1) CPU Check');
   WriteLn('  2) Prime Check (continuous stress loop)');
   WriteLn('  3) XMS Scanner');
-  WriteLn('  4) Quit to DOS');
+  WriteLn('  4) AddrGallop Scanner (address-line test)');
+  WriteLn('  5) Quit to DOS');
   WriteLn;
   Write('Choice: ');
 end;
@@ -1192,7 +1457,8 @@ begin
       '1': RunCPUCheck;
       '2': RunPrimeCheck;
       '3': RunXMSScanner;
-      '4': Done := True;
+      '4': RunAddrGallopScanner;
+      '5': Done := True;
     end;
   end;
 end.
