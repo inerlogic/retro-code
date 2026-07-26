@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-life_seed_search.py -- simulate Jon Millen's 1D Life rule on a ring of any
+life_seed_search.py, simulate Jon Millen's 1D Life rule on a ring of any
 size, to find seed values with interesting (long transient / long cycle)
 dynamics before committing to testing them on real hardware.
 
@@ -22,7 +22,7 @@ Usage:
     python3 life_seed_search.py 16 --top 20 # show more results
 
 For ring sizes much bigger than 16, an exhaustive search (2^N seeds) stops
-being practical -- you'd want random sampling instead, the same way an
+being practical, you'd want random sampling instead, the same way an
 earlier exploratory pass in this file's history used `random.seed()` over
 a few thousand samples before the full 16-bit search became worth running.
 """
@@ -53,14 +53,14 @@ def step(cells: list[int]) -> list[int]:
 
 
 def seed_to_cells(seed: int, n: int) -> list[int]:
-    """cell[i] = bit i of seed -- matches the UNPACK convention used in
+    """cell[i] = bit i of seed, matches the UNPACK convention used in
     LIFE8.ASM / LIFE16.ASM (cell0 = bit0 of the low byte, etc.)."""
     return [(seed >> i) & 1 for i in range(n)]
 
 
 def transient_and_cycle(seed: int, n: int) -> tuple[int, int]:
     """Run a seed forward until its state repeats. Returns
-    (transient_length, cycle_length) -- transient_length is how many
+    (transient_length, cycle_length), transient_length is how many
     generations pass before the first repeated state, cycle_length is
     how long the repeating loop is once it settles."""
     cells = seed_to_cells(seed, n)

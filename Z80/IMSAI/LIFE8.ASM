@@ -1,20 +1,20 @@
-; LIFE8.ASM -- 1D Game of Life, 8-cell ring, IMSAI front panel display
+; LIFE8.ASM, 1D Game of Life, 8-cell ring, IMSAI front panel display
 ;
 ; Named in tribute to Jon Millen, author of "One-Dimensional Life,"
-; BYTE Magazine, Vol 3 No 12, December 1978 -- the five-cell YYXYY
+; BYTE Magazine, Vol 3 No 12, December 1978, the five-cell YYXYY
 ; neighborhood rule this program implements (same rule as MILLIFE.C /
 ; MILLIFE.PAS elsewhere in this repo). See jonmillen.com/1dlife
 ;
-; This is a standalone, bare-metal program -- no CP/M, no BDOS calls.
+; This is a standalone, bare-metal program, no CP/M, no BDOS calls.
 ; Runs forever, displaying each generation on the IMSAI's Programmed
 ; Output LEDs (port 0FFH, assumed). The panel is assumed active-low
-; (0 bit = LED on), matching the author's recollection -- if the
+; (0 bit = LED on), matching the author's recollection, if the
 ; lights come out backwards, remove the CMA instruction in MAINLOOP.
 ;
 ; CONFIRMED WORKING on The High Nibble (an ESP32-based IMSAI 8080
 ; emulator), configured to emulate a Z80 at 4MHz. Live LED pattern
 ; matched a from-scratch simulation of the seed value exactly,
-; transient blip included -- see IMSAI/README.md for the full writeup.
+; transient blip included, see IMSAI/README.md for the full writeup.
 ; Assembled successfully with both Macroassembler AS and the stock
 ; CP/M 2.2 ASM.COM (CP/M ASSEMBLER VER 2.0). Timing constants (DELAY1/
 ; DELAY2/DELAY3) have been tuned and confirmed on this hardware too --
@@ -25,7 +25,7 @@
 ; convention per call) over clever register-packed code. An earlier
 ; draft tried to be more register-efficient and had two real bugs from
 ; it (a mis-accumulating pack routine, and a loop counter silently
-; clobbered by a nested call) -- simplicity won out on purpose here.
+; clobbered by a nested call), simplicity won out on purpose here.
 ;
 ; Assembled for classic Intel 8080 mnemonics (works with both AS and
 ; classic ASM.COM). Adjust ORG below to match wherever this
@@ -33,10 +33,10 @@
 
         ORG     0100H
 
-OUTPORT EQU     0FFH            ; Programmed Output port -- confirm this
-DELAY1  EQU     0FFH            ; innermost delay loop count -- TUNE ON HARDWARE
-DELAY2  EQU     0FFH            ; middle delay loop count -- TUNE ON HARDWARE
-DELAY3  EQU     004H            ; outer delay loop count -- confirmed on
+OUTPORT EQU     0FFH            ; Programmed Output port, confirm this
+DELAY1  EQU     0FFH            ; innermost delay loop count, TUNE ON HARDWARE
+DELAY2  EQU     0FFH            ; middle delay loop count, TUNE ON HARDWARE
+DELAY3  EQU     004H            ; outer delay loop count, confirmed on
                                  ; hardware: gives ~1-1.25s per generation,
                                  ; a good pace (016H, the original tuned
                                  ; value, worked but was slower, ~4-5s)
@@ -51,7 +51,7 @@ START:  LXI     H,SEED
 
 MAINLOOP:
         CALL    PACK            ; A := packed byte from CELLA (cell0=bit0)
-        CMA                     ; invert -- panel is active-low
+        CMA                     ; invert, panel is active-low
         OUT     OUTPORT
         CALL    DELAY
 
@@ -71,7 +71,7 @@ RESEED: LDA     SEEDCUR
         JMP     MAINLOOP
 
 ; ------------------------------------------------------------------
-; UNPACK -- explode SEEDCUR's bits into CELLA[0..7] (0 or 1 each).
+; UNPACK, explode SEEDCUR's bits into CELLA[0..7] (0 or 1 each).
 ; cell0 = bit0 of SEEDCUR, ... cell7 = bit7.
 ; Clobbers: A, B, C, H, L.
 ; ------------------------------------------------------------------
@@ -89,7 +89,7 @@ UNPLP:  MOV     C,A             ; C = remaining bits still to process
         RET
 
 ; ------------------------------------------------------------------
-; PACK -- build a byte in A from CELLA[0..7], cell0 = bit0 ... cell7 = bit7.
+; PACK, build a byte in A from CELLA[0..7], cell0 = bit0 ... cell7 = bit7.
 ; Standard "shift-and-or" building from the high end down, so cell7
 ; (processed first) ends up shifted left the most (into bit7), and
 ; cell0 (processed last) ends up unshifted (bit0).
@@ -106,9 +106,9 @@ PAKLP:  ADD     A               ; shift left, zero-fill bit0 (A := A+A)
         RET
 
 ; ------------------------------------------------------------------
-; GETCELLA -- input: A = index (0-7). Output: A = CELLA[index].
+; GETCELLA, input: A = index (0-7). Output: A = CELLA[index].
 ; Walks HL forward from CELLA by INX, one step at a time, rather than
-; computing an address directly -- avoids needing B/C as an address
+; computing an address directly, avoids needing B/C as an address
 ; scratch pair that a caller might be relying on elsewhere.
 ; Preserves B/C via push/pop (caller's BC is untouched on return).
 ; ------------------------------------------------------------------
@@ -127,7 +127,7 @@ GCDONE: MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; SETCELLB -- input: A = index (0-7), C = value (0 or 1).
+; SETCELLB, input: A = index (0-7), C = value (0 or 1).
 ; Stores C into CELLB[index]. Same INX-walk approach as GETCELLA, same
 ; B/C preservation via push/pop.
 ; ------------------------------------------------------------------
@@ -149,7 +149,7 @@ SETDONE:
         RET
 
 ; ------------------------------------------------------------------
-; WRAP8 -- input: A (any value from -2 to 9, which is all this program
+; WRAP8, input: A (any value from -2 to 9, which is all this program
 ; ever produces). Output: A wrapped into 0..7. Only ever needs at most
 ; one add-8 or one subtract-8 given that input range.
 ; Clobbers: A only.
@@ -163,10 +163,10 @@ W8A:    CPI     8
 W8DONE: RET
 
 ; ------------------------------------------------------------------
-; NEIGHSUM -- input: A = i (0-7). Output: A = sum of CELLA at ring
-; positions (i-2, i-1, i+1, i+2 mod 8) -- the four Y cells in Millen's
+; NEIGHSUM, input: A = i (0-7). Output: A = sum of CELLA at ring
+; positions (i-2, i-1, i+1, i+2 mod 8), the four Y cells in Millen's
 ; YYXYY neighborhood. Uses memory (NSI) to hold the index rather than
-; a register, and C as a running total -- safe because GETCELLA always
+; a register, and C as a running total, safe because GETCELLA always
 ; preserves the caller's BC pair via push/pop, so C survives across
 ; each GETCELLA call intact. WRAP8 touches only A, so it can't disturb
 ; C either.
@@ -207,7 +207,7 @@ NEIGHSUM:
         RET
 
 ; ------------------------------------------------------------------
-; STEP -- compute CELLB[i] from CELLA using Millen's rule for each of
+; STEP, compute CELLB[i] from CELLA using Millen's rule for each of
 ; the 8 ring positions:
 ;   result = alive  if dead  and neighbor-sum is 2 or 3  (birth)
 ;   result = alive  if alive and neighbor-sum is 2 or 4   (survival)
@@ -261,7 +261,7 @@ STSTORE:
         RET
 
 ; ------------------------------------------------------------------
-; COPYBTOA -- CELLA[0..7] := CELLB[0..7]
+; COPYBTOA, CELLA[0..7] := CELLB[0..7]
 ; ------------------------------------------------------------------
 COPYBTOA:
         LXI     H,CELLB
@@ -276,14 +276,14 @@ CBALP:  MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; CHECKDEAD -- Z flag set on return if CELLB is all zero
+; CHECKDEAD, Z flag set on return if CELLB is all zero
 ; ------------------------------------------------------------------
 CHECKDEAD:
         LXI     H,CELLB
         MVI     B,8
 CDLP:   MOV     A,M
         ORA     A
-        RNZ                     ; found a live cell -- return with Z clear
+        RNZ                     ; found a live cell, return with Z clear
         INX     H
         DCR     B
         JNZ     CDLP
@@ -291,14 +291,14 @@ CDLP:   MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; CHECKFULL -- Z flag set on return if CELLB is all one
+; CHECKFULL, Z flag set on return if CELLB is all one
 ; ------------------------------------------------------------------
 CHECKFULL:
         LXI     H,CELLB
         MVI     B,8
 CFLP:   MOV     A,M
         CPI     1
-        RNZ                     ; found a dead cell -- return with Z clear
+        RNZ                     ; found a dead cell, return with Z clear
         INX     H
         DCR     B
         JNZ     CFLP
@@ -306,7 +306,7 @@ CFLP:   MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; DELAY -- triple-nested delay loop (DELAY3 * DELAY2 * DELAY1 total
+; DELAY, triple-nested delay loop (DELAY3 * DELAY2 * DELAY1 total
 ; inner iterations), tune all three constants on real hardware. Three
 ; tiers instead of two gives a much wider tunable range without
 ; needing anything bigger than 8-bit counters.
@@ -331,7 +331,7 @@ DLYIN:  DCR     C
 ; Data
 ; ------------------------------------------------------------------
 SEED:       DB      00011011B   ; = 27 decimal. Settles (like every possible
-                                 ; seed does, in ~2 gens -- an 8-cell ring is
+                                 ; seed does, in ~2 gens, an 8-cell ring is
                                  ; just too small for a longer transient) into
                                  ; a 5-generation cycle instead of the default
                                  ; original seed's boring 2-generation one --

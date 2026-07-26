@@ -11,7 +11,7 @@
 - **No reliable CMOS-backed clock.** This unit's RTC isn't backed by a
   persistent CMOS battery (only the main battery), so the date/time
   resets to an arbitrary epoch on cold boot rather than holding a real
-  wall-clock value -- confirmed directly by a file timestamp coming back
+  wall-clock value, confirmed directly by a file timestamp coming back
   as `12/31/1979 11:00:00 PM`, one minute before DOS's own epoch. Any
   project needing elapsed-time tracking across a boot should account
   for this; the BIOS timer-tick counter is unaffected by it, and

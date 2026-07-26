@@ -1,25 +1,25 @@
-; LIFE16.ASM -- 1D Game of Life, 16-cell ring, IMSAI front panel display
+; LIFE16.ASM, 1D Game of Life, 16-cell ring, IMSAI front panel display
 ;
 ; Same rule and same overall structure as LIFE8.ASM in this folder, but
 ; the ring is 16 cells instead of 8. Since the Programmed Output panel
 ; only has 8 physical LEDs, a 16-cell colony is shown as two sequential
-; 8-bit halves per generation -- low cells (0-7) displayed, a pause,
+; 8-bit halves per generation, low cells (0-7) displayed, a pause,
 ; then high cells (8-15) displayed, another pause, then the next
 ; generation is computed. This is a genuine improvement over 8 cells,
 ; not just a bigger number: an exhaustive simulation of all 65536
 ; possible 16-bit seeds found some settle into a 48-generation cycle
-; (after an 8-generation transient) -- versus 8 cells, where every one
+; (after an 8-generation transient), versus 8 cells, where every one
 ; of the 256 possible seeds settles within 2 generations into a cycle
 ; no longer than 5. Sixteen cells is a real qualitative jump, not a
 ; marginal one.
 ;
 ; Named in tribute to Jon Millen, author of "One-Dimensional Life,"
-; BYTE Magazine, Vol 3 No 12, December 1978 -- the five-cell YYXYY
+; BYTE Magazine, Vol 3 No 12, December 1978, the five-cell YYXYY
 ; neighborhood rule this program implements (same rule as MILLIFE.C /
 ; MILLIFE.PAS / LIFE8.ASM elsewhere in this repo). See jonmillen.com/1dlife
 ;
-; Standalone, bare-metal -- no CP/M, no BDOS. Same active-low panel
-; assumption as LIFE8.ASM (CMA before each OUT) -- confirmed correct on
+; Standalone, bare-metal, no CP/M, no BDOS. Same active-low panel
+; assumption as LIFE8.ASM (CMA before each OUT), confirmed correct on
 ; real (fake) hardware, same panel/port as LIFE8.ASM.
 ;
 ; CONFIRMED WORKING on The High Nibble (an ESP32-based IMSAI 8080
@@ -28,7 +28,7 @@
 ; and duplexing logic both correct, and the timing (DELAY1/DELAY2/
 ; DELAY3 for the main per-generation pause, HALFDELAY1/HALFDELAY2 for
 ; the shorter pause between the LO and HI halves) has been tuned and
-; confirmed on hardware too -- the overall rhythm reads clearly as
+; confirmed on hardware too, the overall rhythm reads clearly as
 ; intended: a quick LO-HI pair, then a longer pause, repeating --
 ; "1-2---1-2---1-2." No further tuning needed at the values below.
 ;
@@ -39,16 +39,16 @@
 
         ORG     0100H
 
-OUTPORT EQU     0FFH            ; Programmed Output port -- confirmed
-DELAY1  EQU     0FFH            ; innermost delay loop count -- confirmed on hardware
-DELAY2  EQU     0FFH            ; middle delay loop count -- confirmed on hardware
-DELAY3  EQU     004H            ; outer delay loop count -- confirmed on hardware,
+OUTPORT EQU     0FFH            ; Programmed Output port, confirmed
+DELAY1  EQU     0FFH            ; innermost delay loop count, confirmed on hardware
+DELAY2  EQU     0FFH            ; middle delay loop count, confirmed on hardware
+DELAY3  EQU     004H            ; outer delay loop count, confirmed on hardware,
                                  ; same value LIFE8.ASM settled on; gives the
                                  ; intended "1-2---1-2---1-2" rhythm at 4MHz Z80
 HALFDELAY1 EQU  0FFH            ; shorter delay between the LO and HI halves
-HALFDELAY2 EQU  0FFH            ; of the same generation -- confirmed on hardware,
+HALFDELAY2 EQU  0FFH            ; of the same generation, confirmed on hardware,
                                  ; long enough to read as a clearly held state
-                                 ; (was 020H, ~35ms -- too short, that was the
+                                 ; (was 020H, ~35ms, too short, that was the
                                  ; original flicker's actual cause)
 
 ; ------------------------------------------------------------------
@@ -92,8 +92,8 @@ RESEED: LDA     SEEDLCUR
         JMP     MAINLOOP
 
 ; ------------------------------------------------------------------
-; UNPACKLO -- explode SEEDLCUR's bits into CELLA[0..7]
-; UNPACKHI -- explode SEEDHCUR's bits into CELLA[8..15]
+; UNPACKLO, explode SEEDLCUR's bits into CELLA[0..7]
+; UNPACKHI, explode SEEDHCUR's bits into CELLA[8..15]
 ; Same logic as LIFE8.ASM's UNPACK, duplicated for each half rather
 ; than parameterized.
 ; ------------------------------------------------------------------
@@ -126,8 +126,8 @@ UPHILP: MOV     C,A
         RET
 
 ; ------------------------------------------------------------------
-; PACKLO -- A := packed byte from CELLA[0..7] (cell0=bit0...cell7=bit7)
-; PACKHI -- A := packed byte from CELLA[8..15] (cell8=bit0...cell15=bit7)
+; PACKLO, A := packed byte from CELLA[0..7] (cell0=bit0...cell7=bit7)
+; PACKHI, A := packed byte from CELLA[8..15] (cell8=bit0...cell15=bit7)
 ; Same shift-and-or logic as LIFE8.ASM's PACK, duplicated for each half.
 ; ------------------------------------------------------------------
 PACKLO: LXI     H,CELLA+7
@@ -151,8 +151,8 @@ PHILP:  ADD     A
         RET
 
 ; ------------------------------------------------------------------
-; GETCELLA -- input: A = index (0-15). Output: A = CELLA[index].
-; Identical to LIFE8.ASM's version -- this walk-by-INX approach never
+; GETCELLA, input: A = index (0-15). Output: A = CELLA[index].
+; Identical to LIFE8.ASM's version, this walk-by-INX approach never
 ; hardcoded 8 anywhere, so it works unchanged for a 16-entry array.
 ; ------------------------------------------------------------------
 GETCELLA:
@@ -170,7 +170,7 @@ GCDONE: MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; SETCELLB -- input: A = index (0-15), C = value (0 or 1).
+; SETCELLB, input: A = index (0-15), C = value (0 or 1).
 ; Identical approach to LIFE8.ASM's version, same reasoning as above.
 ; ------------------------------------------------------------------
 SETCELLB:
@@ -191,10 +191,10 @@ SETDONE:
         RET
 
 ; ------------------------------------------------------------------
-; WRAP16 -- input: A (any value from -2 to 17, which is all this
+; WRAP16, input: A (any value from -2 to 17, which is all this
 ; program ever produces for a 16-cell ring). Output: A wrapped into
 ; 0..15. Same two-branch approach as LIFE8.ASM's WRAP8, just with 16
-; instead of 8 -- verified by the same reasoning: the input range only
+; instead of 8, verified by the same reasoning: the input range only
 ; ever needs at most one add-16 or one subtract-16 to land in range.
 ; ------------------------------------------------------------------
 WRAP16: CPI     0
@@ -207,7 +207,7 @@ W16DONE:
         RET
 
 ; ------------------------------------------------------------------
-; NEIGHSUM -- input: A = i (0-15). Output: A = sum of CELLA at ring
+; NEIGHSUM, input: A = i (0-15). Output: A = sum of CELLA at ring
 ; positions (i-2, i-1, i+1, i+2 mod 16). Same structure as LIFE8.ASM's
 ; version, just calling WRAP16 instead of WRAP8.
 ; ------------------------------------------------------------------
@@ -247,7 +247,7 @@ NEIGHSUM:
         RET
 
 ; ------------------------------------------------------------------
-; STEP -- same Millen's-rule logic as LIFE8.ASM's STEP, just looping
+; STEP, same Millen's-rule logic as LIFE8.ASM's STEP, just looping
 ; 0..15 instead of 0..7.
 ; ------------------------------------------------------------------
 STEP:   XRA     A
@@ -294,7 +294,7 @@ STSTORE:
         RET
 
 ; ------------------------------------------------------------------
-; COPYBTOA -- CELLA[0..15] := CELLB[0..15]
+; COPYBTOA, CELLA[0..15] := CELLB[0..15]
 ; ------------------------------------------------------------------
 COPYBTOA:
         LXI     H,CELLB
@@ -309,7 +309,7 @@ CBALP:  MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; CHECKDEAD -- Z flag set on return if CELLB is all zero
+; CHECKDEAD, Z flag set on return if CELLB is all zero
 ; ------------------------------------------------------------------
 CHECKDEAD:
         LXI     H,CELLB
@@ -324,7 +324,7 @@ CDLP:   MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; CHECKFULL -- Z flag set on return if CELLB is all one
+; CHECKFULL, Z flag set on return if CELLB is all one
 ; ------------------------------------------------------------------
 CHECKFULL:
         LXI     H,CELLB
@@ -339,8 +339,8 @@ CFLP:   MOV     A,M
         RET
 
 ; ------------------------------------------------------------------
-; DELAY -- triple-nested, shown after both halves of a generation.
-; HALFDELAY -- shorter double-nested delay, shown between the LO and
+; DELAY, triple-nested, shown after both halves of a generation.
+; HALFDELAY, shorter double-nested delay, shown between the LO and
 ; HI halves of the SAME generation, so each half is actually visible
 ; as its own distinct display rather than blurring together.
 ; ------------------------------------------------------------------
@@ -374,7 +374,7 @@ HDIN:   DCR     C
 ; ------------------------------------------------------------------
 ; Data
 ; ------------------------------------------------------------------
-; Seed 5471 (0x155F) -- found by exhaustively simulating all 65536
+; Seed 5471 (0x155F), found by exhaustively simulating all 65536
 ; possible 16-bit seeds: an 8-generation transient, then a 48-
 ; generation cycle, the longest cycle length possible for a 16-cell
 ; ring under this rule. Change freely; see IMSAI/README.md.

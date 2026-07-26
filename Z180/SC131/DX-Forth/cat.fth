@@ -1,5 +1,5 @@
 \ ============================================================
-\  CAT.FTH -- paged file viewer for DX-Forth
+\  CAT.FTH, paged file viewer for DX-Forth
 \  Usage:  INCLUDE CAT.FTH
 \          CAT DXFORTH.GLO
 \  Any key continues; 'q' or Esc quits early.

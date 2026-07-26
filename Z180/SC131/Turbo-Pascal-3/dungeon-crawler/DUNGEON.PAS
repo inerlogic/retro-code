@@ -272,7 +272,7 @@ begin
   GotoXY(X_OFFSET + 40, Y_OFFSET + 9);  Write('*** TRAVELING MERCHANT SHOP ***'); ClrEol;
   GotoXY(X_OFFSET + 40, Y_OFFSET + 11); Write('POTION: Restores 2 HP (Cost: 10 c)'); ClrEol;
   GotoXY(X_OFFSET + 40, Y_OFFSET + 12); Write('Your Stash: ', Coins, ' c | Health: ', HP, '/10'); ClrEol;
-  { Update 3: clear this line explicitly -- ResolveMonsterCombat writes its
+  { Update 3: clear this line explicitly, ResolveMonsterCombat writes its
     "[F] Fight (Roll 1-6 Die)" prompt here, and since ProcessMerchant is
     called right after combat with no ClrScr in between, that stale text
     was bleeding through onto the merchant screen. }

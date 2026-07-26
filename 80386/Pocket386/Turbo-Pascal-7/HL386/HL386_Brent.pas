@@ -1,11 +1,11 @@
 program HexLifeLog386;
 uses Crt;
 
-{ REFERENCE VERSION -- straightforward two-phase Brent's, no shortcut.
+{ REFERENCE VERSION, straightforward two-phase Brent's, no shortcut.
   FindMu always replays from generation 0. See HL386.pas (without the
   _Brent suffix) for the speed-optimized sibling, which usually skips
   most of that replay by starting from a previous checkpoint instead,
-  when provably safe to -- see that file's FindMu comment for the full
+  when provably safe to, see that file's FindMu comment for the full
   reasoning and validation. Both files are otherwise identical.
 
   Version history for both files lives in this folder's README. }
@@ -13,7 +13,7 @@ uses Crt;
 { 244x38 grid (9,272 cells) in VGA's 80x50 text mode (8x8 font), centered
   with margin on all sides, plus a status line on row 1 (Seed/Generation/
   Elapsed). Grid dimensions are sized for the physical screen's aspect
-  ratio -- see the GRIDW/GRIDH const comment for the derivation.
+  ratio, see the GRIDW/GRIDH const comment for the derivation.
 
   Gen and the checksum are LongInt (32-bit), not Integer (16-bit): Gen
   needs the range for long-running seeds, and a 32-bit checksum keeps
@@ -24,7 +24,7 @@ uses Crt;
   high well before that.
 
   The seed LFSR generator (RandSeedVal/GetRnd) stays 16-bit deliberately
-  -- it's a proven generator and 65,536 possible seeds is already more
+ , it's a proven generator and 65,536 possible seeds is already more
   diversity than needed; widening it properly would mean designing a new
   32-bit tap constant from scratch, not just relabeling the variable.
 
@@ -32,7 +32,7 @@ uses Crt;
   doubling in spacing (1, 2, 4, 8, 16, ...), catches a cycle of any
   period using bounded memory. Because it's only comparing 32-bit
   CHECKSUMS, not actual grid states, a checksum match is treated as a
-  CANDIDATE, not a confirmed cycle -- it's verified against a real
+  CANDIDATE, not a confirmed cycle, it's verified against a real
   snapshot of the full grid (byte-for-byte) taken at the same checkpoint
   before being accepted. That verification is what actually eliminates
   false positives, rather than just making them less likely.
@@ -40,7 +40,7 @@ uses Crt;
   CSV logs elapsed SECONDS via the BIOS timer-tick counter at 0040:006C,
   not a wall-clock timestamp, accumulated incrementally once per
   generation so it stays correct even across multiple midnight
-  rollovers -- see AccumulateElapsedTicks/TicksToSeconds below for why
+  rollovers, see AccumulateElapsedTicks/TicksToSeconds below for why
   (short version: this machine's RTC isn't trustworthy).
 
   CSV format is Seed,Mu,EstimatedMuSeconds,Period. Phase-1 detection
@@ -50,12 +50,12 @@ uses Crt;
   phase, below) recovers the true mu exactly. Period is exact (Lam-1 at
   match time); EstimatedMuSeconds is a proportional ESTIMATE scaled from
   the real measured detection-time, not a direct timing, since FindMu's
-  replay happens after the fact at a different real-world moment -- see
+  replay happens after the fact at a different real-world moment, see
   the logging block's comment for the full reasoning. }
 
 const
   { GRIDW/GRIDH: Sized to ~9,000-10,000 cells (erring smaller), proportioned to the
-    physical screen's real 6.125" x 3.5" aspect ratio (1.75:1) -- NOT by
+    physical screen's real 6.125" x 3.5" aspect ratio (1.75:1), NOT by
     setting GRIDW:GRIDH to 1.75 directly, since a Life cell isn't square
     on this display. Four cells pack into one character horizontally but
     only one per character vertically, so each individual cell is about
@@ -84,13 +84,13 @@ var
   CellA, CellB, Snapshot: TGrid;   { Snapshot: full-state checkpoint for
                                       verifying a Brent's candidate match }
   TortoiseScratch: TGrid;          { extra scratch grid for FindMu's second
-                                      phase -- see FindMu's comment for why
+                                      phase, see FindMu's comment for why
                                       only 1 new array is needed, not 4 }
   Gen: LongInt;
   Ch: Char;
   KeepRunning: Boolean;
   HexDigits: THexDigits;
-  RandSeedVal: Integer;    { LFSR stays 16-bit -- see note above }
+  RandSeedVal: Integer;    { LFSR stays 16-bit, see note above }
   SeedVal: LongInt;
   LastChecksum: LongInt;
   LogFile: Text;
@@ -105,7 +105,7 @@ var
   DetectionGen: LongInt;     { Gen at the moment phase 1 detected a match }
   DetectionSeconds: LongInt; { real measured seconds at DetectionGen }
   EstimatedMuSeconds: LongInt; { proportionally-scaled estimate of real
-                                 seconds at Mu -- see the logging block's
+                                 seconds at Mu, see the logging block's
                                  comment for why this is an estimate, not
                                  a direct measurement }
 
@@ -161,7 +161,7 @@ begin
       Dst[X, Y] := Src[X, Y];
 end;
 
-{ Byte-for-byte comparison -- this is what actually confirms a Brent's
+{ Byte-for-byte comparison, this is what actually confirms a Brent's
   checksum candidate is a real cycle and not a collision. Only ever runs
   when a checksum match has already fired, so the O(GRIDW*GRIDH) cost is
   paid rarely, not every generation. }
@@ -233,7 +233,7 @@ end;
   producing a false trigger on every single doubling boundary. Comparing
   first, then refreshing for next time, avoids that.
 
-  Reference version -- no shortcut. See HL386.pas for the sibling that
+  Reference version, no shortcut. See HL386.pas for the sibling that
   additionally preserves the checkpoint being replaced here, so its
   FindMu can often skip most of its replay. }
 function CycleCandidate(Checksum: LongInt): Boolean;
@@ -254,11 +254,11 @@ begin
   CopyGrid(CellB, CellA);
 end;
 
-{ Distinct from DrawStatus on purpose -- reusing DrawStatus here would
+{ Distinct from DrawStatus on purpose, reusing DrawStatus here would
   show a stale, non-updating Gen/Elapsed pair (those aren't tracked
   during FindMu's replay), which could read as "the counter's frozen"
   rather than "this is a different phase." Updated every 10 steps, not
-  every single one -- frequent enough to prove it's alive, cheap enough
+  every single one, frequent enough to prove it's alive, cheap enough
   not to meaningfully slow the replay down. The 4-frame hourglass cycles
   based on StepNum, purely so a glance at the screen shows motion, not
   just a changing number. }
@@ -278,7 +278,7 @@ begin
 end;
 
 { FindMu: Brent's phase 1 (CycleCandidate, above) only finds a candidate
-  PERIOD cheaply -- it deliberately never learns WHERE in the run the actual
+  PERIOD cheaply, it deliberately never learns WHERE in the run the actual
   repeating cycle started, called "mu" in the standard algorithm. The
   logged "Generation" from phase 1 alone is the DETECTION point, which
   overshoots the true convergence point by an amount that depends purely
@@ -286,23 +286,23 @@ end;
   is Brent's standard second phase: re-simulate from the seed's true
   starting grid, advance a "hare" pointer exactly FoundPeriod steps
   ahead of a "tortoise" pointer, then advance both one step at a time
-  together until they match -- the number of steps taken in THIS phase
+  together until they match, the number of steps taken in THIS phase
   is mu, the true convergence generation, exactly (not an estimate).
 
-  Reference version -- always replays from generation 0, no shortcut.
+  Reference version, always replays from generation 0, no shortcut.
   See HL386.pas for the sibling that usually skips most of this replay
   by starting from a previous checkpoint instead, when provably safe to.
 
   Cost: this requires re-simulating up to (mu + FoundPeriod) additional
   generations from scratch, which in the worst case is comparable in
-  size to the original detection generation -- i.e., this can roughly
+  size to the original detection generation, i.e., this can roughly
   DOUBLE the total computation time for a seed's convergence. There's no
   way around that with bounded memory; it's the standard price of Brent's
   two-phase form.
 
   Memory: needs 4 grids in principle (tortoise-current/next,
   hare-current/next), but only 1 new one is actually declared
-  (TortoiseScratch) -- CellA, CellB, and Snapshot are all safely reusable
+  (TortoiseScratch), CellA, CellB, and Snapshot are all safely reusable
   as scratch here, since by the time this runs, the CURRENT seed's real
   simulation has already concluded (we're between detecting convergence
   and moving to the next seed), and the outer loop reseeds CellA fresh
@@ -312,7 +312,7 @@ var
   I: LongInt;
   Mu: LongInt;
 begin
-  { Reconstruct x0 -- this seed's exact starting grid -- by re-seeding
+  { Reconstruct x0, this seed's exact starting grid, by re-seeding
     identically to how the outer loop originally did it. CellA becomes
     the tortoise's current position; CellB becomes the hare's. }
   RandSeedVal := Integer(SeedVal and $FFFF);
@@ -329,7 +329,7 @@ begin
     if (I mod 10) = 0 then DrawMuProgress(I);
   end;
 
-  { Now advance both one step at a time until they match -- tortoise
+  { Now advance both one step at a time until they match, tortoise
     ping-pongs CellA/TortoiseScratch, hare continues on CellB/Snapshot }
   Mu := 0;
   while KeepRunning and (not StatesMatch(CellA, CellB)) do
@@ -363,12 +363,12 @@ begin
     12: TextColor(12); { Light Red }
     13: TextColor(7);  { Light Gray }
     14: TextColor(15); { White }
-    15: TextColor(15); { White -- one unavoidable repeat, only 15 usable
+    15: TextColor(15); { White, one unavoidable repeat, only 15 usable
                           non-black colors exist for 16 nibble values }
   end;
 end;
 
-{ Draws only the grid, centered at GRIDLEFT/GRIDTOP -- row 1 is reserved
+{ Draws only the grid, centered at GRIDLEFT/GRIDTOP, row 1 is reserved
   for the status line (DrawStatus below), and the margins around the
   grid (columns 1-9/71-80, rows 2-6/45-50) are deliberately left
   untouched, not just narrowly avoided.
@@ -377,7 +377,7 @@ end;
   specifically: Crt's Write() tracks the cursor and auto-wraps/scrolls
   when a write would advance past the active window's bottom-right
   corner. As long as the grid's own last-drawn row/column isn't the
-  screen's actual last row/column, that can't happen -- centering with
+  screen's actual last row/column, that can't happen, centering with
   margin all around keeps that true regardless of grid size changes
   later. }
 procedure DrawGrid;
@@ -412,7 +412,7 @@ begin
 end;
 
 { Elapsed time via the BIOS timer-tick counter at 0040:006C, NOT the
-  RTC/calendar clock (GetTime/GetDate) -- this machine's CMOS clock isn't
+  RTC/calendar clock (GetTime/GetDate), this machine's CMOS clock isn't
   trustworthy, so any wall-clock reading would just be recording
   nonsense. The BIOS tick counter is different: it's incremented by the
   motherboard's timer chip firing an interrupt about 18.2065 times a
@@ -423,8 +423,8 @@ end;
   measured as a single before/after subtraction at the start and end of
   a seed's run. This is what makes it correct for a seed that takes
   several days to converge, not just one that crosses a single midnight:
-  since the check below runs once a generation -- far more often than
-  once every 24 hours -- it's not possible to miss a rollover, no matter
+  since the check below runs once a generation, far more often than
+  once every 24 hours, it's not possible to miss a rollover, no matter
   how many midnights a single seed's run happens to span. }
 const
   SECONDS_PER_TICK = 65536.0 / 1193182.0;
@@ -448,14 +448,14 @@ begin
 end;
 
 { Starts at the grid's own left edge (GRIDLEFT), not column 1 of the
-  screen or centered over the grid -- lines up visually with the grid
+  screen or centered over the grid, lines up visually with the grid
   below it rather than sitting off to its left. ClrEol after writing
   (rather than manual space-padding) clears any leftover digits from a
-  previous, longer value -- e.g. Generation shrinking from 6 digits back
+  previous, longer value, e.g. Generation shrinking from 6 digits back
   down to 5 on a fresh reseed wouldn't otherwise erase the stray leading
   digit left behind. Since the start column is fixed (not recalculated
   per-frame the way a centered version would need), a simple post-write
-  ClrEol is enough -- no need to clear the whole line first. }
+  ClrEol is enough, no need to clear the whole line first. }
 procedure DrawStatus;
 begin
   GotoXY(GRIDLEFT, 3);
@@ -485,7 +485,7 @@ begin
   while KeepRunning do
   begin
     { RandSeedVal (the 16-bit LFSR) is intentionally fed only the low 16
-      bits of SeedVal (now a LongInt) -- it doesn't need the full range,
+      bits of SeedVal (now a LongInt), it doesn't need the full range,
       just a differing starting bit pattern each time SeedVal increments,
       which truncation still provides even once SeedVal grows past 65535. }
     RandSeedVal := Integer(SeedVal and $FFFF);
@@ -514,7 +514,7 @@ begin
         begin
           { Lam has already been incremented once (unconditionally, inside
             CycleCandidate) beyond the value that produced this match, so
-            subtracting 1 recovers the exact true period -- see FindMu's
+            subtracting 1 recovers the exact true period, see FindMu's
             comment for the full derivation. }
           FoundPeriod := Lam - 1;
           DetectionGen := Gen;
@@ -525,14 +525,14 @@ begin
           if KeepRunning then
           begin
             { Logging block: EstimatedMuSeconds is a proportional ESTIMATE, not a direct
-              measurement -- FindMu's replay happens after the fact and at
+              measurement, FindMu's replay happens after the fact and at
               a different real-world time than the original run, so there's
               no wall-clock reading to take AT generation Mu directly. The
               scaling assumes a roughly constant generations/second rate,
               which holds here because StepGrid/DrawGrid/ComputeChecksum
               all do the same fixed amount of work every generation
               (a full pass over the grid) regardless of what's actually
-              alive on it -- worth knowing it's interpolated, not timed. }
+              alive on it, worth knowing it's interpolated, not timed. }
             if DetectionGen > 0 then
               EstimatedMuSeconds := Round((Mu / DetectionGen) * DetectionSeconds)
             else
@@ -543,7 +543,7 @@ begin
 
             { Tied to a successful log write deliberately: SeedVal, at any
               point the program might stop, always reflects "the seed
-              currently in progress, not yet logged" -- never a seed
+              currently in progress, not yet logged", never a seed
               that's already been counted past. That's what makes
               "SeedVal - 1" reliable in the exit message below, regardless
               of whether the interruption happens during the main loop or
@@ -566,6 +566,6 @@ begin
   TextMode(CO80);   { back to normal 80x25 so the exit message is readable }
   ClrScr;
   WriteLn('Run stopped by user request.');
-  WriteLn('Seed ', SeedVal, ' was interrupted -- not logged.');
+  WriteLn('Seed ', SeedVal, ' was interrupted, not logged.');
   WriteLn('Last completed seed: ', SeedVal - 1);
 end.

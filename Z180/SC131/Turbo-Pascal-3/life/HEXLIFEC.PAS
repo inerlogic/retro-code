@@ -1,9 +1,9 @@
 program HexLifeC;
 
-{ HEXLIFEC.PAS -- color variant of HEXLIFE.PAS. Same toroidal 2D Conway's
+{ HEXLIFEC.PAS, color variant of HEXLIFE.PAS. Same toroidal 2D Conway's
   Life, same 160x18 grid, same seedable LFSR, same silent checksum-based
   reseed, same confirmed-working ESC fix (frequent KeyPressed checks
-  inside Step's loop) -- the only thing that changes is DrawGrid: instead
+  inside Step's loop), the only thing that changes is DrawGrid: instead
   of printing a plain hex digit, it colors the digit's TEXT by its value
   (0 ascending), keeping the actual hex character visible rather than
   replacing it with a solid block like HEXPI.PAS/MILLIFE.PAS do.
@@ -14,19 +14,19 @@ program HexLifeC;
   assembly programs elsewhere in this repo).
 
   Classic 8-neighbor Conway's Life rule (same as AUTOLIF.BAS/LIFE.BAS),
-  not Millen's 1D 4-neighbor rule -- what's borrowed from the 1D life
+  not Millen's 1D 4-neighbor rule, what's borrowed from the 1D life
   programs here is the TECHNIQUE, not the rule: a rolling checksum
   history (same "checksum := checksum*3 + cell" approach as MILLIF2.C)
   detects when the grid has settled into a repeating cycle, and silently
-  reseeds with a fresh random grid when it has -- no visible message,
+  reseeds with a fresh random grid when it has, no visible message,
   unlike MILLIF2.C's announced version.
 
   Grid deliberately sized smaller than the full terminal (40 hex columns
-  = 160 cells wide, 18 rows) rather than filling all 80x24 -- two 320x24
+  = 160 cells wide, 18 rows) rather than filling all 80x24, two 320x24
   grids would have been 15360 bytes, a meaningful fraction of a modest
   CP/M TPA; at 160x18 it's 5760 bytes, a much more comfortable margin.
   The border and "Seed:/Generation:/Checksum:" header are static chrome
-  around this smaller field -- drawn once at startup/reseed, never
+  around this smaller field, drawn once at startup/reseed, never
   redrawn during normal per-generation steps, and can be turned off
   entirely via the SHOW_CHROME constant below if you'd rather have the
   borderless look (modern/virtual terminals don't have the burn-in
@@ -35,13 +35,13 @@ program HexLifeC;
 const
   SHOW_CHROME = True;        { set False + recompile for the borderless look }
   HIDE_CURSOR = True;        { set False + recompile to see the cursor track
-                               where the redraw currently is -- useful as a
+                               where the redraw currently is, useful as a
                                visual indicator of the "wave," which is the
                                whole reason to leave this toggle-able rather
                                than picking one and committing }
 
   HEXCOLS  = 40;             { playing-field width in hex digits }
-  GRIDW    = 160;            { HEXCOLS * 4 -- cell width }
+  GRIDW    = 160;            { HEXCOLS * 4, cell width }
   GRIDH    = 18;             { cell height }
   HISTLEN  = 8;              { checksum history length, matches MILLIF2.C }
 
@@ -80,7 +80,7 @@ var
   SeedVal: Integer;
   LastChecksum: Integer;
 
-{ Same LFSR as MILLIFE.PAS's already-hardware-confirmed GetRnd -- reused
+{ Same LFSR as MILLIFE.PAS's already-hardware-confirmed GetRnd, reused
   here instead of Pascal's built-in Random()/Randomize(), specifically
   because it's seedable with a real, user-typed, displayable number
   (matching AUTOLIF.BAS's seed-prompt convention), where Randomize just
@@ -131,7 +131,7 @@ begin
   CellCounter := 0;
   for X := 1 to GRIDW do
   begin
-    { X-wrap only depends on X, not Y -- hoisted out of the inner loop
+    { X-wrap only depends on X, not Y, hoisted out of the inner loop
       so it's computed once per column (GRIDW times total) instead of
       once per cell (GRIDW*GRIDH times) like the old NeighborSum did. }
     if X = 1 then XM := GRIDW else XM := X - 1;
@@ -164,7 +164,7 @@ begin
         times per generation) instead reliably works. Root mechanism
         not fully understood (possibly some UART/BDOS-level behavior on
         this specific machine that needs reasonably frequent polling to
-        catch an incoming byte before it's lost) -- but this fix is
+        catch an incoming byte before it's lost), but this fix is
         confirmed via isolated test stubs, independent of any display
         logic. See Turbo-Pascal-3/life/README.md for the full debugging story. }
       CellCounter := CellCounter + 1;
@@ -219,7 +219,7 @@ begin
 end;
 
 { Draws the static border + "Seed:/Generation:/Checksum:" labels (and
-  the seed number itself, which -- unlike generation/checksum -- doesn't
+  the seed number itself, which, unlike generation/checksum, doesn't
   change during a run, so it's drawn here once rather than in the
   per-generation update). Called once at startup and once per reseed --
   never during normal per-generation steps. }
@@ -263,7 +263,7 @@ begin
 end;
 
 { Updates only the Generation and Checksum NUMBERS, not their label text
-  (which DrawChrome already drew) -- padded to a fixed width so a
+  (which DrawChrome already drew), padded to a fixed width so a
   shrinking digit count doesn't leave stale characters behind. }
 procedure DrawHeaderNumbers;
 var
@@ -284,14 +284,14 @@ end;
 
 { Heat-map gradient, ordered by perceived brightness/heat rather than
   grouped by color family (unlike HEXPI.PAS's original table, which this
-  no longer directly mirrors) -- 0 = dark gray (deliberately, not true
+  no longer directly mirrors), 0 = dark gray (deliberately, not true
   black, so it stays visible) through F = full bright white. }
 procedure DrawGrid;
 var
   X, Y, G, Bit, Nibble, Bucket, CellX, ScreenX, ScreenY, LastBucket: Integer;
   DigitChar: string[1];
 begin
-  LastBucket := -1;   { sentinel -- guaranteed to differ from any real
+  LastBucket := -1;   { sentinel, guaranteed to differ from any real
                          0-7 bucket, so the very first cell always emits
                          its color code rather than assuming a color is
                          already active }
@@ -314,17 +314,17 @@ begin
         number of transmitted color codes under change-detection below:
         two adjacent cells that previously needed different bold/plain
         codes (e.g. nibble 4 and 5) now share a bucket and emit nothing
-        extra between them -- a real fix for the visible "wave," not
+        extra between them, a real fix for the visible "wave," not
         just a simplification. }
       Bucket := Nibble div 2;   { 0,1->0  2,3->1  4,5->2  6,7->3
                                    8,9->4  10,11->5  12,13->6  14,15->7 }
 
       { Only emit a color code when the color actually CHANGES from the
-        previous cell -- skips the redundant escape sequences when
+        previous cell, skips the redundant escape sequences when
         neighboring cells share a bucket, which is common in Life grids.
         No separate reset (\x1b[0m) needed anymore: ALL 8 colors are now
         consistently bold, so every color-change code re-asserts "bold
-        on" as part of itself -- there's never a moment where bold needs
+        on" as part of itself, there's never a moment where bold needs
         CLEARING, only reasserting, and reasserting doesn't need a reset
         first. The earlier reset was only necessary because the palette
         used to mix bold and plain codes; making the palette uniformly
@@ -333,14 +333,14 @@ begin
       if Bucket <> LastBucket then
       begin
         case Bucket of
-          0: Write(#27, '[1;30m', DigitChar); { dark gray -- coldest }
+          0: Write(#27, '[1;30m', DigitChar); { dark gray, coldest }
           1: Write(#27, '[1;34m', DigitChar); { blue }
           2: Write(#27, '[1;36m', DigitChar); { cyan }
           3: Write(#27, '[1;32m', DigitChar); { green }
           4: Write(#27, '[1;33m', DigitChar); { yellow }
           5: Write(#27, '[1;31m', DigitChar); { red }
           6: Write(#27, '[1;35m', DigitChar); { magenta }
-          7: Write(#27, '[1;37m', DigitChar); { bright white -- hottest }
+          7: Write(#27, '[1;37m', DigitChar); { bright white, hottest }
         end;
         LastBucket := Bucket;
       end
@@ -386,7 +386,7 @@ begin
         SeedVal := ((SeedVal shl 1) or (SeedVal shr 14)) + 1;
         RandSeed := SeedVal;
 
-        { Silent reseed -- no message }
+        { Silent reseed, no message }
         ClrScr;
         SeedGrid;
         ClearHistory;
@@ -404,7 +404,7 @@ begin
 
   ClrScr;
   Write(#27, '[?25h');   { always restore the cursor on exit, regardless of
-                            HIDE_CURSOR -- harmless if it was never hidden,
+                            HIDE_CURSOR, harmless if it was never hidden,
                             essential if it was }
   Write('Stopped at generation ', Gen);
   WriteLn;

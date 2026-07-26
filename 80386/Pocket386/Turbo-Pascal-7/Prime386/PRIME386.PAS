@@ -1,9 +1,9 @@
 {$D+,L+,Q-,R-}
-{ PRIME386.PAS -- Lucas-Lehmer CPU self-test + prime-search stress loop  }
+{ PRIME386.PAS, Lucas-Lehmer CPU self-test + prime-search stress loop  }
 { + XMS extended-memory scanner, for the Pocket 386 (no FPU).           }
 { See README.md / TECHNICAL.md for design and verification notes.       }
 { NOTE: the XMS Scanner (menu option 3) is new and NOT yet confirmed    }
-{ on real hardware -- see the caveats in RunXMSScanner's header.        }
+{ on real hardware, see the caveats in RunXMSScanner's header.        }
 
 program Prime386;
 
@@ -35,7 +35,7 @@ type
 
   { Overlays a LongInt with its two 16-bit halves. x86 is little-endian, }
   { so Lo (declared first, lower offset) is the low word and Hi (second,}
-  { higher offset) is the high word -- this is memory layout, not       }
+  { higher offset) is the high word, this is memory layout, not       }
   { computation, so it bypasses whatever "X shr 16" actually compiles to.}
   TLongWords = record
     case Boolean of
@@ -199,7 +199,7 @@ begin
     if iterCount > 8 then
     begin
       WriteLn;
-      WriteLn('*** ModMersenneWords did not converge for p=', p, ' after 8 iterations -- logic error ***');
+      WriteLn('*** ModMersenneWords did not converge for p=', p, ' after 8 iterations, logic error ***');
       Halt(1);
     end;
   until False;
@@ -313,7 +313,7 @@ begin
     if ok then
       WriteLn('PASS (s=0, correctly prime)')
     else
-      WriteLn('*** FAIL *** (expected PASS -- known Mersenne prime)');
+      WriteLn('*** FAIL *** (expected PASS, known Mersenne prime)');
   end;
   WriteLn;
   WriteLn('Done. Press any key to return to menu.');
@@ -381,7 +381,7 @@ begin
     else if sweepOK then
       WriteLn(' clean')
     else
-      WriteLn(' -- fault(s) this sweep');
+      WriteLn(', fault(s) this sweep');
   end;
 
   WriteLn;
@@ -392,7 +392,7 @@ begin
 end;
 
 { ---------------------------- menu option 3 ---------------------------- }
-{ XMS extended-memory scanner. UNTESTED ON REAL HARDWARE -- there is no  }
+{ XMS extended-memory scanner. UNTESTED ON REAL HARDWARE, there is no  }
 { TP7 compiler available to build/run this before hand-off, so treat    }
 { every AH function number, register convention, and the far-call       }
 { mechanics below as reasoned-through, not confirmed. Likeliest places   }
@@ -422,7 +422,7 @@ begin
   XMSEntry := Ptr(Regs.ES, Regs.BX);
 end;
 
-{ Register-only XMS calls (query/allocate/free -- no memory structure). }
+{ Register-only XMS calls (query/allocate/free, no memory structure). }
 function XMSQueryLargestKB: Word;
 var
   AXOut: Word;
@@ -551,7 +551,7 @@ var
 begin
   WriteLn;
   WriteLn('--- XMS Scanner (v1: fill/read-back patterns) ---');
-  WriteLn('NOTE: not yet confirmed on real hardware -- report any oddities.');
+  WriteLn('NOTE: not yet confirmed on real hardware, report any oddities.');
   WriteLn;
 
   if not XMSPresent then
@@ -633,7 +633,7 @@ end;
 procedure ShowMenu;
 begin
   ClrScr;
-  WriteLn('PRIME386 -- Pocket 386 self-verifying stress test');
+  WriteLn('PRIME386, Pocket 386 self-verifying stress test');
   WriteLn;
   WriteLn('  1) CPU Check');
   WriteLn('  2) Prime Check (continuous stress loop)');

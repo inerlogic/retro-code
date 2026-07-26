@@ -1,20 +1,20 @@
 # HL386T.pas
 
 A [Conway's Game of Life](https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life) screensaver for the Pocket 386, written in Turbo
-Pascal 7.0 -- part of the same Life-family of screensavers found elsewhere
+Pascal 7.0, part of the same Life-family of screensavers found elsewhere
 in this repository, but with a data-logging component alongside
 the visuals rather than just running for its own sake.
 
 ## Two versions
 
-- **`HL386T.pas`** -- the one to use. Same previous-checkpoint shortcut
+- **`HL386T.pas`**, the one to use. Same previous-checkpoint shortcut
   in `FindMu` as the earlier `HL386.pas` (now retired), plus real
   measured timing: `CycleCandidate` preserves the actual BIOS-tick count
   alongside each checkpoint's state, and `FindMu` accumulates real
   elapsed ticks during its own replay rather than estimating from the
   original detection run's timing. CSV's third column is `MuSeconds` --
   a genuine measurement, not an estimate.
-- **`HL386_Brent.pas`** -- the reference version: straightforward,
+- **`HL386_Brent.pas`**, the reference version: straightforward,
   textbook two-phase Brent's algorithm, no shortcut, and still the
   original proportional-estimate timing (`EstimatedMuSeconds`), left
   unchanged deliberately to preserve a known-simple baseline that
@@ -30,7 +30,7 @@ dense, colorful full-screen display in VGA's 80x50 text mode. Rather than
 seeding once and running forever, the program works through consecutive
 starting seeds automatically: it seeds a grid, runs it until the pattern
 provably settles into a repeating cycle, logs data about that seed to a
-CSV file, then moves on to the next seed and repeats -- a continuous,
+CSV file, then moves on to the next seed and repeats, a continuous,
 unattended sweep across seed space.
 
 Detecting "provably settled" on bounded memory, for a cycle of *any*
@@ -38,7 +38,7 @@ length rather than only short ones, uses [Brent's cycle-detection algorithm](htt
 When a candidate cycle is found, the program briefly pauses
 the visible simulation to calculate the *exact* generation at which the
 pattern actually converged (rather than just the generation at which
-convergence was confirmed, which can overshoot the true point) -- shown
+convergence was confirmed, which can overshoot the true point), shown
 on screen as a small animated ASCII hourglass and step counter, since this
 calculation can itself take a little while and would otherwise look like
 the program was hung.
@@ -55,18 +55,18 @@ HL386T.pas:       Seed,Mu,MuSeconds,Period
 HL386_Brent.pas:  Seed,Mu,EstimatedMuSeconds,Period
 ```
 
-- **Seed** -- the starting seed value for that run
-- **Mu** -- the exact generation at which the pattern first entered its
+- **Seed**, the starting seed value for that run
+- **Mu**, the exact generation at which the pattern first entered its
   repeating cycle
-- **MuSeconds** (`HL386T.pas`) -- real elapsed seconds at generation Mu,
+- **MuSeconds** (`HL386T.pas`), real elapsed seconds at generation Mu,
   accumulated tick-by-tick during `FindMu`'s own replay
-- **EstimatedMuSeconds** (`HL386_Brent.pas`) -- an estimate, not a direct
+- **EstimatedMuSeconds** (`HL386_Brent.pas`), an estimate, not a direct
   measurement, scaled proportionally from timing measured elsewhere in
   the run
-- **Period** -- the exact length of the repeating cycle, in generations
+- **Period**, the exact length of the repeating cycle, in generations
 
 Elapsed time is tracked via the BIOS timer-tick counter rather than the
-system clock, since this machine's CMOS clock isn't reliable -- see
+system clock, since this machine's CMOS clock isn't reliable, see
 [Pocket 386](../../) for the shared hardware note on this.
 
 ## Statistical analysis (seeds 1-570 sweep)
@@ -81,11 +81,11 @@ Across the full 570-seed combined sweep:
   Mu ranges from 318 to 6037, with most seeds converging in the
   500-2000 generation range and a long, thinning tail beyond that.
 - **Period 2 dominates overwhelmingly**: 566 of 570 seeds (99.3%)
-  settle into a period-2 oscillation. Only four seeds -- 1, 26, 302,
-  and 446 -- land on period 6 instead; no other period appeared
+  settle into a period-2 oscillation. Only four seeds, 1, 26, 302,
+  and 446, land on period 6 instead; no other period appeared
   anywhere in the sweep.
 - **A single, isolated Mu ceiling**: seed 482 is the slowest to
-  converge in the entire sweep, at Mu=6037 -- more than 800
+  converge in the entire sweep, at Mu=6037, more than 800
   generations clear of the next-highest seed (550, at Mu=5192), and
   well over 3x the sweep's mean. The rest of the tail is comparatively
   tightly clustered by contrast.
@@ -93,7 +93,7 @@ Across the full 570-seed combined sweep:
 ## Oscillating structures
 
 Because each hex digit is just 4 packed bits, the actual Life patterns on
-screen -- blinkers, traffic lights, and gliders among them -- are
+screen, blinkers, traffic lights, and gliders among them, are
 decodable directly from the displayed hex values, without needing a
 graphical rendering. Several have been confirmed this way on live runs,
 including multiple traffic lights and at least one glider caught in the
@@ -105,17 +105,17 @@ for the full decoding reference and worked examples.
 Pressing ESC stops the sweep (checked periodically during both the main
 simulation and the convergence calculation, not just between seeds). On
 exit, the program reports which seed was interrupted and which one was
-actually last completed and logged -- these are deliberately not the
+actually last completed and logged, these are deliberately not the
 same number:
 
 ```
 Run stopped by user request.
-Seed 31 was interrupted -- not logged.
+Seed 31 was interrupted, not logged.
 Last completed seed: 30
 ```
 
 Resuming later means typing the next seed number in by hand at the
-starting prompt -- the program doesn't read the CSV to figure out where
+starting prompt, the program doesn't read the CSV to figure out where
 it left off automatically.
 
 ## Hardware & software
@@ -134,21 +134,21 @@ format (`Seed,Mu,EstimatedMuSeconds,Period`) is correct.
 
 `HL386T.pas`: compiled and running on the actual Pocket 386, and
 validated far beyond a first smoke test. The previous-checkpoint
-shortcut in `FindMu` is confirmed working -- no long silent wait on
-convergence -- and the real tick-based `MuSeconds` has been cross-checked
+shortcut in `FindMu` is confirmed working, no long silent wait on
+convergence, and the real tick-based `MuSeconds` has been cross-checked
 against `HL386_Brent.pas`'s `Mu` and `Period` (which match exactly for
 the same seeds, as expected from a deterministic simulation). Beyond
 that: run continuously across two separate Pocket 386 units in parallel
 over several days, covering seeds 1-570 with zero gaps and zero
 duplicates in the combined log, including multiple unattended stretches
 of 20+ hours each. One logging anomaly turned up early in this process
-and never recurred -- see "Version history" for what happened and how it
+and never recurred, see "Version history" for what happened and how it
 was chased down. The corrected interrupted-seed exit message is also
 confirmed:
 
 ```
 Run stopped by user request.
-Seed 3 was interrupted -- not logged.
+Seed 3 was interrupted, not logged.
 Last completed seed: 2
 ```
 
@@ -160,7 +160,7 @@ Last completed seed: 2
   box, not a direct port, so several 8-bit-era compromises got dropped
   along the way (see below).
 - **Grid size and layout went through three stages.** First attempt was
-  a fully borderless 320x50 grid -- filling the screen's literal last
+  a fully borderless 320x50 grid, filling the screen's literal last
   row/column every generation triggered Crt's own end-of-window
   auto-scroll on every redraw, creeping the whole display upward by one
   line per generation. Fixed by shrinking to 320x44 with a margin, which
@@ -178,7 +178,7 @@ Last completed seed: 2
   generation 52,064). Both were widened to LongInt (32-bit).
 - **Cycle detection was originally an 8-deep checksum history, not
   Brent's algorithm.** That approach could only ever detect cycles of
-  period <= 8, no matter how long it ran -- a lone glider circumnavigating
+  period <= 8, no matter how long it ran, a lone glider circumnavigating
   a torus this size has a true period in the thousands of generations,
   which an 8-deep window would never catch. Replaced with Brent's
   algorithm, which catches a cycle of any period using a single
@@ -186,12 +186,12 @@ Last completed seed: 2
 - **Checksum matches were originally trusted directly.** Since Brent's
   only compares 32-bit checksums, not actual grid states, a checksum
   match is now treated as a candidate and verified against a real
-  snapshot of the full grid before being accepted -- this is what
+  snapshot of the full grid before being accepted, this is what
   actually eliminates false positives, not just makes them less likely.
 - **CSV format was originally Seed,Generation,ElapsedSeconds.** Phase-1
   detection alone only tells you when a cycle was *confirmed*, which
   overshoots the true convergence point by an amount that depends on
-  checkpoint-schedule luck, not on the pattern -- observed directly: two
+  checkpoint-schedule luck, not on the pattern, observed directly: two
   different seeds, having genuinely settled at different points, both
   logged an identical detection generation of 2049 (= 2048 + 1) purely
   because the checkpoint doubling happened to catch both in the same
@@ -199,8 +199,8 @@ Last completed seed: 2
   the true convergence point (Mu) and exact Period instead.
 - **Elapsed time was originally read from GetTime/GetDate (the RTC).**
   `LIFELOG.CSV`'s own file creation date came back as 12/31/1979
-  11:00:00 PM -- the classic no-working-RTC default, one minute before
-  DOS's own epoch of 1/1/1980 -- confirming this machine's CMOS clock
+  11:00:00 PM, the classic no-working-RTC default, one minute before
+  DOS's own epoch of 1/1/1980, confirming this machine's CMOS clock
   isn't trustworthy. Switched to the BIOS timer-tick counter instead,
   which is independent of the CMOS battery.
 - **A real bug: SeedVal used to advance unconditionally.** An ESC during
@@ -212,7 +212,7 @@ Last completed seed: 2
   "Run paused... last processed seed state was: N" to explicitly
   distinguishing the interrupted seed from the last completed one.
 - **The FindMu progress indicator was added, then tuned twice.** It
-  didn't exist originally -- a long FindMu replay looked identical to a
+  didn't exist originally, a long FindMu replay looked identical to a
   hang, with zero on-screen feedback. Added an animated indicator, then
   sped up its update cadence roughly 10x (every 10 steps instead of
   every 100, since the original cadence was slow enough to still look
@@ -222,18 +222,18 @@ Last completed seed: 2
   cases with zero incorrect results; usable in over 99% of them, saving
   ~1,150 generations on average when it was. `HL386_Brent.pas` was kept
   as-is at this point specifically to preserve a known-simple reference
-  implementation -- see "Two versions" above for what the shortcut does
+  implementation, see "Two versions" above for what the shortcut does
   and why it's believed correct.
 - **`HL386T.pas` replaced `HL386.pas` as the primary version.** The old
   `EstimatedMuSeconds` proportional estimate was always an approximation
-  -- accurate enough to be useful, but not a real measurement. `HL386T`
+ , accurate enough to be useful, but not a real measurement. `HL386T`
   adds genuine tick-based timing: `CycleCandidate` now preserves the
   real BIOS-tick count alongside each checkpoint's saved state (mirroring
   how it already preserved the checkpoint's generation number and grid),
   and `FindMu` accumulates real elapsed ticks during its own replay,
   starting from that preserved value when the shortcut is used rather
   than from zero. `HL386_Brent.pas` was deliberately left on the old
-  estimate -- changing it means re-testing it, and its whole purpose is
+  estimate, changing it means re-testing it, and its whole purpose is
   being a stable, known-simple baseline that doesn't move.
 - **A logging anomaly, chased down but never conclusively explained.**
   Early in `HL386T`'s first extended run, a session that visibly
@@ -242,8 +242,8 @@ Last completed seed: 2
   not appended, not a fresh file either. Code review turned up nothing:
   the file-open, write, and flush logic was byte-for-byte identical to
   the already-confirmed-working `HL386.pas`. Two direct hardware tests
-  afterward -- creating a fresh file, then appending to an existing one
-  -- both worked correctly. No write-protection on the card, a clean
+  afterward, creating a fresh file, then appending to an existing one
+ , both worked correctly. No write-protection on the card, a clean
   compile, and every subsequent run since (spanning a combined ~570
   seeds across two separate machines, including several unattended
   stretches of 20+ hours each) logged with zero recurrence. Leading

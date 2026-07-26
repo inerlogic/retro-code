@@ -1,5 +1,5 @@
 program HexLife;
-{ HEXLIFE.PAS -- 2D Conway's Life, toroidal (wraps all 4 sides) 
+{ HEXLIFE.PAS, 2D Conway's Life, toroidal (wraps all 4 sides) 
 
   Same toroidal 2D Conway's Life, same 160x18 grid, same seedable LFSR, 
   same silent checksum-based reseed, same confirmed-working ESC fix 
@@ -10,19 +10,19 @@ program HexLife;
   assembly programs elsewhere in this repo).
 
   Classic 8-neighbor Conway's Life rule (same as AUTOLIF.BAS/LIFE.BAS),
-  not Millen's 1D 4-neighbor rule -- what's borrowed from the 1D life
+  not Millen's 1D 4-neighbor rule, what's borrowed from the 1D life
   programs here is the TECHNIQUE, not the rule: a rolling checksum
   history (same "checksum := checksum*3 + cell" approach as MILLIF2.C)
   detects when the grid has settled into a repeating cycle, and silently
-  reseeds with a fresh random grid when it has -- no visible message,
+  reseeds with a fresh random grid when it has, no visible message,
   unlike MILLIF2.C's announced version.
 
   Grid deliberately sized smaller than the full terminal (40 hex columns
-  = 160 cells wide, 18 rows) rather than filling all 80x24 -- two 320x24
+  = 160 cells wide, 18 rows) rather than filling all 80x24, two 320x24
   grids would have been 15360 bytes, a meaningful fraction of a modest
   CP/M TPA; at 160x18 it's 5760 bytes, a much more comfortable margin.
   The border and "Seed:/Generation:/Checksum:" header are static chrome
-  around this smaller field -- drawn once at startup/reseed, never
+  around this smaller field, drawn once at startup/reseed, never
   redrawn during normal per-generation steps, and can be turned off
   entirely via the SHOW_CHROME constant below if you'd rather have the
   borderless look (modern/virtual terminals don't have the burn-in
@@ -33,7 +33,7 @@ const
   SHOW_CHROME = True; { set False + recompile for the borderless look }
   HIDE_CURSOR = True; { Added to fix the "begin expected" compilation error }
   HEXCOLS = 40;       { playing-field width in hex digits }
-  GRIDW = 160;        { HEXCOLS * 4 -- cell width }
+  GRIDW = 160;        { HEXCOLS * 4, cell width }
   GRIDH = 18;         { cell height }
   HISTLEN = 8;        { checksum history length, matches MILLIF2.C }
   BOXLEFT = 19;

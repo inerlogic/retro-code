@@ -1,5 +1,5 @@
 {$D+,L+,Q-,R-}
-{ Prime386-alpha.PAS -- Lucas-Lehmer CPU self-test for the Pocket 386 (no FPU) }
+{ Prime386-alpha.PAS, Lucas-Lehmer CPU self-test for the Pocket 386 (no FPU) }
 { Frozen snapshot: single-purpose CPU-test core, the version THE-SHR16-SAGA.md }
 { was written about. Preserved as-is for history; PRIME386.PAS is the current, }
 { menu-driven program. See README.md / TECHNICAL.md for design notes.         }
@@ -20,7 +20,7 @@ type
 
   { Overlays a LongInt with its two 16-bit halves. x86 is little-endian,
     so Lo (declared first, lower offset) is the low word and Hi (declared
-    second, higher offset) is the high word -- this is memory layout, not
+    second, higher offset) is the high word, this is memory layout, not
     computation, so it bypasses whatever "X shr 16" actually compiles to. }
   TLongWords = record
     case Boolean of
@@ -184,7 +184,7 @@ begin
     if iterCount > 8 then
     begin
       WriteLn;
-      WriteLn('*** ModMersenneWords did not converge for p=', p, ' after 8 iterations -- logic error ***');
+      WriteLn('*** ModMersenneWords did not converge for p=', p, ' after 8 iterations, logic error ***');
       Halt(1);
     end;
   until False;
@@ -291,7 +291,7 @@ var
   ok: Boolean;
 
 begin
-  WriteLn('PRIME386 -- Lucas-Lehmer CPU self-verification test');
+  WriteLn('PRIME386, Lucas-Lehmer CPU self-verification test');
   WriteLn;
 
   for idx := 1 to NumTestExponents do
@@ -303,6 +303,6 @@ begin
     if ok then
       WriteLn('PASS (s=0, correctly prime)')
     else
-      WriteLn('*** FAIL *** (expected PASS -- known Mersenne prime)');
+      WriteLn('*** FAIL *** (expected PASS, known Mersenne prime)');
   end;
 end.

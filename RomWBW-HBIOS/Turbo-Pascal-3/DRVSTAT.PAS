@@ -3,7 +3,7 @@ program DrvStat;
 const
   { Update 1: these three constants replace what used to be hardcoded
     Drive=0/1/2 checks buried in the print logic below. Edit these three
-    to match YOUR system's "Configuring Drives..." boot banner -- this
+    to match YOUR system's "Configuring Drives..." boot banner, this
     part still isn't auto-detected (no verified way to query the real
     HBIOS unit name string back from the drive), so it remains a manual
     one-time edit rather than something that adapts itself. }
@@ -12,20 +12,20 @@ const
   ROM_DRIVE  = 2;   { drive index that maps to MD1:0 (ROM)                    }
 
   { This offset assumes exactly 2 non-SD drives (RAM+ROM) come before the
-    SD-backed drives start at slice 0 -- true on this machine's layout,
+    SD-backed drives start at slice 0, true on this machine's layout,
     but edit if yours differs (e.g. only 1 non-SD drive, or 3). }
   SD_SLICE_OFFSET = 2;
 
   { Update 2: reverted the Update-1 attempt at dynamic drive detection.
     Checking BdosHL(14, Drive)'s return value doesn't work as a safety
-    check -- BDOS's OWN error handler for Select Disk fires immediately
+    check, BDOS's OWN error handler for Select Disk fires immediately
     on an invalid drive (printing "Bdos Err On x: Select" and aborting),
     before this program ever gets control back to check anything. This
     was confirmed on real hardware: it crashed at drive O:, recoverable
     only via Ctrl-C.
 
     Honestly, I don't fully understand the exact BDOS/CBIOS interaction
-    here well enough to trust a clever workaround -- there's probably a
+    here well enough to trust a clever workaround, there's probably a
     genuinely safe way to detect this, but I don't know it for certain,
     so rather than guess again on real hardware, this just goes back to
     a manual, known-safe cutoff. Edit this constant to match how many
@@ -52,7 +52,7 @@ var
   SliceStr: string[4];
 
 { Update 3: replaces the old hand-counted-trailing-spaces approach, which
-  had an off-by-SD_SLICE_OFFSET bug -- the branch checked "Drive >= 10"
+  had an off-by-SD_SLICE_OFFSET bug, the branch checked "Drive >= 10"
   (the drive LETTER position) when it should have checked whether the
   computed slice number itself was double-digit, so K:/L: (single-digit
   slices 8/9) got the padding meant for double-digit slices and landed
@@ -108,7 +108,7 @@ begin
         { Print drive letter with consistent alignment }
         Write(' ', Chr(65 + Drive), ':  ');
 
-        { Build target label, then pad to a fixed width -- see PadRight above }
+        { Build target label, then pad to a fixed width, see PadRight above }
         if Drive = BOOT_DRIVE then TargetStr := 'SD0:0    (Boot)'
         else if Drive = RAM_DRIVE then TargetStr := 'MD0:0    (RAM)'
         else if Drive = ROM_DRIVE then TargetStr := 'MD1:0    (ROM)'

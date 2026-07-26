@@ -1,16 +1,16 @@
 program HexLifeC;
 
-{ HEXLIF16.PAS -- color variant of HEXLIFE.PAS. Same toroidal 2D Conway's
+{ HEXLIF16.PAS, color variant of HEXLIFE.PAS. Same toroidal 2D Conway's
   Life, same 160x18 grid, same seedable LFSR, same silent checksum-based
   reseed, same confirmed-working ESC fix (frequent KeyPressed checks
-  inside Step's loop) -- the only thing that changes is DrawGrid: instead
+  inside Step's loop), the only thing that changes is DrawGrid: instead
   of printing a plain hex digit, it colors the digit's TEXT by its value
   (0 ascending), keeping the actual hex character visible rather than
   replacing it with a solid block like HEXPI.PAS/MILLIFE.PAS do.
 
   Color table is a genuine brightness-ordered heat-map gradient (0 = dark
   gray through F = full white), not a direct conversion of HEXPI.PAS's
-  table -- that earlier approach grouped colors by family (all blues,
+  table, that earlier approach grouped colors by family (all blues,
   then all greens, etc.) rather than by perceived brightness, so it
   wasn't actually a gradient in the sense wanted here. See DrawGrid's own
   comment for the full color-table design notes, including the one
@@ -23,19 +23,19 @@ program HexLifeC;
   assembly programs elsewhere in this repo).
 
   Classic 8-neighbor Conway's Life rule (same as AUTOLIF.BAS/LIFE.BAS),
-  not Millen's 1D 4-neighbor rule -- what's borrowed from the 1D life
+  not Millen's 1D 4-neighbor rule, what's borrowed from the 1D life
   programs here is the TECHNIQUE, not the rule: a rolling checksum
   history (same "checksum := checksum*3 + cell" approach as MILLIF2.C)
   detects when the grid has settled into a repeating cycle, and silently
-  reseeds with a fresh random grid when it has -- no visible message,
+  reseeds with a fresh random grid when it has, no visible message,
   unlike MILLIF2.C's announced version.
 
   Grid deliberately sized smaller than the full terminal (40 hex columns
-  = 160 cells wide, 18 rows) rather than filling all 80x24 -- two 320x24
+  = 160 cells wide, 18 rows) rather than filling all 80x24, two 320x24
   grids would have been 15360 bytes, a meaningful fraction of a modest
   CP/M TPA; at 160x18 it's 5760 bytes, a much more comfortable margin.
   The border and "Seed:/Generation:/Checksum:" header are static chrome
-  around this smaller field -- drawn once at startup/reseed, never
+  around this smaller field, drawn once at startup/reseed, never
   redrawn during normal per-generation steps, and can be turned off
   entirely via the SHOW_CHROME constant below if you'd rather have the
   borderless look (modern/virtual terminals don't have the burn-in
@@ -43,7 +43,7 @@ program HexLifeC;
 
   Same debugging history as HEXLIFE.PAS applies here (ESC needing
   frequent KeyPressed checks inside Step, not just once per generation)
-  -- already fixed, since this file is based on the confirmed-working
+ , already fixed, since this file is based on the confirmed-working
   version. See Turbo-Pascal-3/life/README.md for the full story.
 
 
@@ -51,7 +51,7 @@ const
   SHOW_CHROME = True;        { set False + recompile for the borderless look }
 
   HEXCOLS  = 40;             { playing-field width in hex digits }
-  GRIDW    = 160;            { HEXCOLS * 4 -- cell width }
+  GRIDW    = 160;            { HEXCOLS * 4, cell width }
   GRIDH    = 18;             { cell height }
   HISTLEN  = 8;              { checksum history length, matches MILLIF2.C }
 
@@ -90,7 +90,7 @@ var
   SeedVal: Integer;
   LastChecksum: Integer;
 
-{ Same LFSR as MILLIFE.PAS's already-hardware-confirmed GetRnd -- reused
+{ Same LFSR as MILLIFE.PAS's already-hardware-confirmed GetRnd, reused
   here instead of Pascal's built-in Random()/Randomize(), specifically
   because it's seedable with a real, user-typed, displayable number
   (matching AUTOLIF.BAS's seed-prompt convention), where Randomize just
@@ -141,7 +141,7 @@ begin
   CellCounter := 0;
   for X := 1 to GRIDW do
   begin
-    { X-wrap only depends on X, not Y -- hoisted out of the inner loop
+    { X-wrap only depends on X, not Y, hoisted out of the inner loop
       so it's computed once per column (GRIDW times total) instead of
       once per cell (GRIDW*GRIDH times) like the old NeighborSum did. }
     if X = 1 then XM := GRIDW else XM := X - 1;
@@ -174,7 +174,7 @@ begin
         times per generation) instead reliably works. Root mechanism
         not fully understood (possibly some UART/BDOS-level behavior on
         this specific machine that needs reasonably frequent polling to
-        catch an incoming byte before it's lost) -- but this fix is
+        catch an incoming byte before it's lost), but this fix is
         confirmed via isolated test stubs, independent of any display
         logic. See Turbo-Pascal-3/life/README.md for the full debugging story. }
       CellCounter := CellCounter + 1;
@@ -233,7 +233,7 @@ end;
   (rotate-and-increment, see LoopDetected handling above) but not during
   the generations between reseeds, so redrawing it here once per reseed,
   rather than every generation, is still correct. Called once at startup
-  and once per reseed -- never during normal per-generation steps. }
+  and once per reseed, never during normal per-generation steps. }
 procedure DrawChrome;
 var
   Y: Integer;
@@ -274,7 +274,7 @@ begin
 end;
 
 { Updates only the Generation and Checksum NUMBERS, not their label text
-  (which DrawChrome already drew) -- padded to a fixed width so a
+  (which DrawChrome already drew), padded to a fixed width so a
   shrinking digit count doesn't leave stale characters behind. }
 procedure DrawHeaderNumbers;
 var
@@ -295,11 +295,11 @@ end;
 
 { Heat-map gradient, ordered by perceived brightness/heat rather than
   grouped by color family (unlike HEXPI.PAS's original table, which this
-  no longer directly mirrors) -- 0 = dark gray (deliberately, not true
+  no longer directly mirrors), 0 = dark gray (deliberately, not true
   black, so it stays visible) through F = full bright white. Only 15
   genuinely distinct, visible ANSI foreground codes exist in this basic
   16-color palette once true black is excluded, so one repeat (bright
-  blue, used twice) was unavoidable -- placed at the blue-to-cyan
+  blue, used twice) was unavoidable, placed at the blue-to-cyan
   transition, a visually gentle spot, rather than disrupting the E/F
   "near blazing to full white" pair specifically requested. }
 procedure DrawGrid;
@@ -307,7 +307,7 @@ var
   X, Y, G, Bit, Nibble, CellX, ScreenX, ScreenY, LastNibble: Integer;
   DigitChar: string[1];
 begin
-  LastNibble := -1;   { sentinel -- guaranteed to differ from any real
+  LastNibble := -1;   { sentinel, guaranteed to differ from any real
                          0-15 value, so the very first cell always emits
                          its color code rather than assuming a color is
                          already active }
@@ -326,11 +326,11 @@ begin
       end;
       DigitChar := Copy(HexDigits, Nibble + 1, 1);
       { Only emit a color code when the color actually CHANGES from the
-        previous cell -- same reset-before-color fix as before (still
+        previous cell, same reset-before-color fix as before (still
         correct, still clears any bled-over bold attribute), but skips
         the redundant escape sequences when neighboring cells share a
         value, which is common in Life grids. This was added because the
-        per-cell reset fix made the whole redraw visibly slow -- a
+        per-cell reset fix made the whole redraw visibly slow, a
         "wave" writing top to bottom rather than an instant redraw --
         confirmed on hardware, not just measured in the abstract. If
         Nibble = LastNibble, just the character is written, reusing
@@ -339,7 +339,7 @@ begin
       if Nibble <> LastNibble then
       begin
         case Nibble of
-          0:  Write(#27, '[0m', #27, '[1;30m', DigitChar); { dark gray -- coldest }
+          0:  Write(#27, '[0m', #27, '[1;30m', DigitChar); { dark gray, coldest }
           1:  Write(#27, '[0m', #27, '[34m', DigitChar);   { dark blue }
           2:  Write(#27, '[0m', #27, '[1;34m', DigitChar); { bright blue }
           3:  Write(#27, '[0m', #27, '[1;34m', DigitChar); { bright blue (repeated --
@@ -354,8 +354,8 @@ begin
           11: Write(#27, '[0m', #27, '[1;31m', DigitChar); { bright red }
           12: Write(#27, '[0m', #27, '[35m', DigitChar);   { dark magenta }
           13: Write(#27, '[0m', #27, '[1;35m', DigitChar); { bright magenta }
-          14: Write(#27, '[0m', #27, '[37m', DigitChar);   { white -- near blazing }
-          15: Write(#27, '[0m', #27, '[1;37m', DigitChar); { bright white -- hottest }
+          14: Write(#27, '[0m', #27, '[37m', DigitChar);   { white, near blazing }
+          15: Write(#27, '[0m', #27, '[1;37m', DigitChar); { bright white, hottest }
         end;
         LastNibble := Nibble;
       end
@@ -402,7 +402,7 @@ begin
         SeedVal := ((SeedVal shl 1) or (SeedVal shr 14)) + 1;
         RandSeed := SeedVal;
 
-        { Silent reseed -- no message }
+        { Silent reseed, no message }
         ClrScr;
         SeedGrid;
         ClearHistory;

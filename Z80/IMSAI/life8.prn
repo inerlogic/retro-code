@@ -2,10 +2,10 @@
 
  0100                   ORG     0100H
                 
- 00FF =         OUTPORT EQU     0FFH            ; Programmed Output port -- confirm this
- 00FF =         DELAY1  EQU     0FFH            ; innermost delay loop count -- TUNE ON HARDWARE
- 00FF =         DELAY2  EQU     0FFH            ; middle delay loop count -- TUNE ON HARDWARE
- 0004 =         DELAY3  EQU     004H            ; outer delay loop count -- TUNE ON HARDWARE
+ 00FF =         OUTPORT EQU     0FFH            ; Programmed Output port, confirm this
+ 00FF =         DELAY1  EQU     0FFH            ; innermost delay loop count, TUNE ON HARDWARE
+ 00FF =         DELAY2  EQU     0FFH            ; middle delay loop count, TUNE ON HARDWARE
+ 0004 =         DELAY3  EQU     004H            ; outer delay loop count, TUNE ON HARDWARE
                 
                 ; ------------------------------------------------------------------
                 ; Entry point
@@ -17,7 +17,7 @@
                 
                 MAINLOOP:
  010A CD4901            CALL    PACK            ; A := packed byte from CELLA (cell0=bit0)
- 010D 2F                CMA                     ; invert -- panel is active-low
+ 010D 2F                CMA                     ; invert, panel is active-low
  010E D3FF              OUT     OUTPORT
  0110 CD4702            CALL    DELAY
                 
@@ -37,7 +37,7 @@
  0132 C30A01            JMP     MAINLOOP
                 
                 ; ------------------------------------------------------------------
-                ; UNPACK -- explode SEEDCUR's bits into CELLA[0..7] (0 or 1 each).
+                ; UNPACK, explode SEEDCUR's bits into CELLA[0..7] (0 or 1 each).
                 ; cell0 = bit0 of SEEDCUR, ... cell7 = bit7.
                 ; Clobbers: A, B, C, H, L.
                 ; ------------------------------------------------------------------
@@ -187,7 +187,7 @@
  0216 C9                RET
                 
                 ; ------------------------------------------------------------------
-                ; COPYBTOA -- CELLA[0..7] := CELLB[0..7]
+                ; COPYBTOA, CELLA[0..7] := CELLB[0..7]
                 ; ------------------------------------------------------------------
                 COPYBTOA:
  0217 216B02            LXI     H,CELLB
@@ -202,14 +202,14 @@
  0227 C9                RET
                 
                 ; ------------------------------------------------------------------
-                ; CHECKDEAD -- Z flag set on return if CELLB is all zero
+                ; CHECKDEAD, Z flag set on return if CELLB is all zero
                 ; ------------------------------------------------------------------
                 CHECKDEAD:
  0228 216B02            LXI     H,CELLB
  022B 0608              MVI     B,8
  022D 7E        CDLP:   MOV     A,M
  022E B7                ORA     A
- 022F C0                RNZ                     ; found a live cell -- return with Z clear
+ 022F C0                RNZ                     ; found a live cell, return with Z clear
  0230 23                INX     H
  0231 05                DCR     B
  0232 C22D02            JNZ     CDLP
@@ -217,14 +217,14 @@
  0236 C9                RET
                 
                 ; ------------------------------------------------------------------
-                ; CHECKFULL -- Z flag set on return if CELLB is all one
+                ; CHECKFULL, Z flag set on return if CELLB is all one
                 ; ------------------------------------------------------------------
                 CHECKFULL:
  0237 216B02            LXI     H,CELLB
  023A 0608              MVI     B,8
  023C 7E        CFLP:   MOV     A,M
  023D FE01              CPI     1
- 023F C0                RNZ                     ; found a dead cell -- return with Z clear
+ 023F C0                RNZ                     ; found a dead cell, return with Z clear
  0240 23                INX     H
  0241 05                DCR     B
  0242 C23C02            JNZ     CFLP
@@ -232,7 +232,7 @@
  0246 C9                RET
                 
                 ; ------------------------------------------------------------------
-                ; DELAY -- triple-nested delay loop (DELAY3 * DELAY2 * DELAY1 total
+                ; DELAY, triple-nested delay loop (DELAY3 * DELAY2 * DELAY1 total
                 ; inner iterations), tune all three constants on real hardware. Three
                 ; tiers instead of two gives a much wider tunable range without
                 ; needing anything bigger than 8-bit counters.
@@ -257,7 +257,7 @@
                 ; Data
                 ; ------------------------------------------------------------------
  025E 1B        SEED:       DB      00011011B   ; = 27 decimal. Settles (like every possible
-                                                 ; seed does, in ~2 gens -- an 8-cell ring is
+                                                 ; seed does, in ~2 gens, an 8-cell ring is
                                                  ; just too small for a longer transient) into
                                                  ; a 5-generation cycle instead of the default
                                                  ; original seed's boring 2-generation one --
