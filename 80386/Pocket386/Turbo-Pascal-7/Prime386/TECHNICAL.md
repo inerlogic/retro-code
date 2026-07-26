@@ -261,6 +261,17 @@ broken, both the CPU Check and Prime Check paths are independently
 confirmed working, and the XMS Scanner's move/compare mechanics were
 separately confirmed clean on the known-good second unit.
 
+**The SHR16 compiler-bug investigation itself, independently confirmed
+closed.** Tracked down a genuine copy of Turbo Pascal 7.01 (verified by
+its file timestamp, `03/03/93, 07:01:00`, matching the documented
+signature) and ran a scratch build reverting the `HiWord` fix back to
+the original buggy `shr 16` line, on real Pocket 386 hardware. Came
+back clean. That's a real reproduction of both the original bug and
+Borland's fix, on the same hardware class and against the actual
+historical compiler, not just a workaround that sidesteps the
+question. Preserved as `701TEST.PAS` for anyone else in the same
+situation.
+
 ## Next steps
 
 - Add the tick/date-based elapsed-time display for burn-in runs.
