@@ -57,9 +57,6 @@ var
   carry: LongInt;
 begin
   ZeroBig2(result);
-  WriteLn('  [after ZeroBig2: result=', result[0], ',', result[1], ',', result[2], ',', result[3],
-          ',', result[4], ',', result[5], ',', result[6], ',', result[7], ']');
-  Flush(Output);
   for i := 0 to NLIMB-1 do
   begin
     carry := 0;
@@ -77,9 +74,6 @@ begin
       carry := LongInt(HiWord(carry)) + LongInt(HiWord(prod));
       Inc(k);
     end;
-    WriteLn('    [SquareWords i=', i, ': a[i]=', a[i], ' result=', result[0], ',', result[1], ',',
-            result[2], ',', result[3], ',', result[4], ',', result[5], ',', result[6], ',', result[7], ']');
-    Flush(Output);
   end;
 end;
 
@@ -127,17 +121,12 @@ var
 begin
   fullWords := p div 16;
   remBits   := p mod 16;
-  WriteLn('  [enter MMW: p=', p, ' fullWords=', fullWords, ' remBits=', remBits, ']');
-  Flush(Output);
 
   cur := x;
   iterCount := 0;
 
   repeat
 { does cur already fit in p bits? }
-    WriteLn('    [iter ', iterCount, ': cur=', cur[0], ',', cur[1], ',', cur[2], ',', cur[3],
-            ',', cur[4], ',', cur[5], ',', cur[6], ',', cur[7], ']');
-    Flush(Output);
     stillTooBig := False;
     for i := NLIMB2-1 downto fullWords do
     begin
@@ -278,18 +267,12 @@ begin
 
   ZeroBig(s);
   s[0] := 4;
-  WriteLn('  [after init: s=', s[0], ',', s[1], ',', s[2], ',', s[3], ']');
-  Flush(Output);
 
   for i := 1 to p - 2 do
   begin
     Write('.');
     Flush(Output);
-    WriteLn('  [before SquareWords: s=', s[0], ',', s[1], ',', s[2], ',', s[3], ']');
-    Flush(Output);
     SquareWords(s, sq);
-    WriteLn('  [after SquareWords: p=', p, ']');
-    Flush(Output);
     ModMersenneWords(sq, p, reduced);
     s := reduced;
     Sub2Mod(s, p);
