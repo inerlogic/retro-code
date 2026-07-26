@@ -220,7 +220,7 @@ full diagnostic trace.
 and confirmed.** The menu and all three modes exist in `PRIME386.PAS`.
 XMS Scanner and Prime Check are both confirmed working on real
 hardware, zero faults on XMS Scanner's full-block run, zero mismatches
-across 3000+ Prime Check sweeps. XMS Scanner now grabs every free
+across 105,590+ Prime Check sweeps. XMS Scanner now grabs every free
 block rather than only the single largest one (handles fragmented
 free memory), confirmed functionally correct on non-fragmented single-
 block cases; the actual multi-block aggregation path hasn't been
