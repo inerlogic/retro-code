@@ -1,7 +1,7 @@
 # Prime386
 
-A "Prime95-like" CPU/memory stress test for the Pocket 386 (ALi M6117
-SoC, 386SX/40, no FPU, DOS 6.22, Turbo Pascal 7.0).
+A "Prime95-like" CPU stress test for the Pocket 386 (ALi M6117 SoC,
+386SX/40, no FPU, DOS 6.22, Turbo Pascal 7.0).
 
 ## Why
 
@@ -10,16 +10,28 @@ answer, repeatedly, a single bit-flip from bad RAM or a flaky ALU
 produces a detectably wrong result rather than silently corrupting
 something unnoticed. It does this via the [Lucas-Lehmer primality test](https://en.wikipedia.org/wiki/Lucas%E2%80%93Lehmer_primality_test)
 for Mersenne primes, using FFT-based multiplication that leans on
-modern floating-point hardware.
+modern floating-point hardware. Prime95 is also, at its core, GIMPS'
+(the Great Internet Mersenne Prime Search) actual search tool, not
+just a self-test, it looks for new Mersenne primes as a side effect of
+verifying hardware.
 
 The 386SX in the Pocket 386 has no FPU. Prime386 applies the same
 self-verifying principle, known exponent in, known correct answer
 out, using pure integer/bignum arithmetic instead.
 
+**Scope note.** Prime386 is deliberately CPU/arithmetic only. A large
+side project grew out of it for a while, chasing a specific known-
+faulty unit's memory defect with custom-built diagnostic tooling. That
+work was real and is preserved, but it isn't what this project is for:
+a mature, dedicated tool (CheckIt) already covers memory diagnostics
+on this hardware professionally, there was no need to reinvent it.
+See "Memory diagnostic detour" below for the summary, and
+[MemTest386](../MemTest386/) for where that code now lives.
+
 ## Files
 
-- **`PRIME386.PAS`** — the current program. Menu-driven, three test
-  modes plus quit.
+- **`PRIME386.PAS`** — the current program. Menu-driven: CPU Check,
+  Prime Check, Search, plus quit.
 - **`Prime386-alpha.PAS`** — a frozen snapshot of the original
   single-purpose CPU-test core, preserved as-is because it's the
   specific version [THE-SHR16-SAGA.md](README.md) is about. Not
@@ -40,50 +52,31 @@ out, using pure integer/bignum arithmetic instead.
   Any run that doesn't end at s=0 indicates an ALU/arithmetic fault.
   Confirmed working on real hardware.
 - **Prime Check**: a continuous stress loop, not a search for new
-  primes (the 4-word bignum tops out at p=61, so there's nothing left
-  to discover in range). Sweeps all 18 primes <= 61 each pass, checking
-  each against its already-known correct answer (9 expected prime, 9
-  expected composite); any mismatch either direction means a hardware
-  fault. Loops until ESC. Confirmed working on real hardware: over
-  100 sweeps, clean the whole way through, zero mismatches.
-- **XMS Scanner**: extended-memory scan, separate from the CPU tests
-  since the tiny bignum footprint does essentially nothing to stress
-  RAM on its own. One compile-time bug found and fixed along the way
-  (a `var` parameter written to from inline asm needed an extra level
-  of indirection that the compiler couldn't generate in one step;
-  replaced with a global variable instead). Reworked to grab every
-  free block, largest-first, until none remain, rather than only the
-  single largest one, so fragmented free memory gets covered too;
-  confirmed functionally correct on non-fragmented single-block cases,
-  the actual multi-block aggregation path hasn't been exercised on
-  real fragmented memory yet.
-
-  **v1 patterns** (simple fill/read-back, 0xAA/0x55): confirmed working
-  on real hardware, a full run across the largest available XMS block
-  came back with zero faults on both patterns.
-
-  **v2 patterns** (added after the faulty-unit result below suggested
-  the simple fill/read-back pattern may not expose every fault class):
-  walking-1/walking-0 (all 16 bit positions, isolates a single bit per
-  word instead of relying on 0xAA/0x55's fixed alternation), address-
-  in-address (each word's data is its own byte offset, so a decode
-  fault that silently redirects a write within the same chunk shows up
-  on readback), and March C- (the standard 6-element march sequence,
-  w0/r0w1/r1w0 ascending then descending/r0, adapted to chunk rather
-  than word granularity since a true per-word XMS move for a multi-MB
-  block would be impractically slow on this CPU). All three algorithms
-  were verified in Python against injected fault models before being
-  written in Pascal (`march_verify.py`, `addr_pattern_verify.py`,
-  `pascal_translit_verify.py`, a direct transliteration of the actual
-  Pascal structure, not just the underlying algorithm, following the
-  same methodology used for the bignum arithmetic). That transliteration
-  check caught a real, worth-knowing limitation: address-in-address, as
-  a single write-then-immediately-read pass per chunk with no revisit,
-  cannot catch coupling between two different chunks in either
-  direction, only March C-'s repeated read-before-write sweeps do that;
-  address-in-address's real job is address/decode integrity within a
-  chunk, not cross-chunk coupling. None of the v2 patterns have run on
-  real hardware yet.
+  primes, a fixed, pre-known self-verifying set run purely for burn-in.
+  Sweeps all 18 primes <= 61 each pass, checking each against its
+  already-known correct answer (9 expected prime, 9 expected
+  composite); any mismatch either direction means a hardware fault.
+  Loops until ESC. Confirmed working on real hardware: over 105,590
+  sweeps, clean the whole way through, zero mismatches.
+- **Search**: the part of Prime95's own spirit ("GIMPS") that Prime
+  Check alone doesn't capture, an open-ended search rather than a
+  fixed self-test. Scans every integer from 2 to `MaxP` (61), checks
+  whether the exponent itself is prime via trial division (a genuine
+  computed check, not a lookup table), and only then runs Lucas-Lehmer
+  on `2^p-1`, reporting the result without consulting any known-answer
+  table. Nothing here can find a genuinely *new* Mersenne prime, this
+  hardware's bignum width (4 words, 64 bits) caps it at exactly the
+  same small range Prime Check already covers, and every exponent in
+  that range has been known and independently verified by others for
+  decades. But nothing here is looked up either, every result is
+  computed fresh, which is the actual distinction from Prime Check.
+  Design verified in Python first (`search_verify.py`): the trial-
+  division-derived set of Mersenne-prime exponents matches the
+  existing `CandExp` table exactly, for every prime <= 61. Extending
+  the range further (toward the next real Mersenne exponent, 89) would
+  need a wider bignum (`NLIMB` > 4) and fresh Python verification of
+  the whole arithmetic stack at that width, a natural future step, not
+  attempted yet. Not yet run on real hardware.
 
 Menu-driven, with the ability to stop a running test (ESC) and return
 to the menu to pick another mode.
@@ -105,7 +98,7 @@ to the menu to pick another mode.
   regardless of sign, and (b) `$Q-` (no overflow-check trap) is the
   compiler default.
 
-## Timing (for the memory-scan burn-in mode)
+## Timing (for burn-in runs)
 
 Originally planned around the raw BIOS tick counter, with manual
 midnight-rollover detection (verified in Python against a simulated
@@ -125,7 +118,8 @@ in principle, regardless of the OS.) Checked directly on the actual
 hardware via `DEBUG` (`O 70 0B` / `I 71`) rather than assuming: reads
 back `02`, meaning bit 0 (DSE) is 0, disabled. With that confirmed,
 `GetDate`/`GetTime`-based elapsed timing is safe on this machine, and
-is the final approach used, no tick-counting fallback needed.
+is the final approach used, no tick-counting fallback needed. Not yet
+wired into the CPU Check/Prime Check/Search UI.
 
 ## Verification methodology
 
@@ -152,7 +146,7 @@ not assumed from general programming experience.
 While bringing up the CPU-test core on real hardware, a diagnostic
 build (temporarily printing internal state inside `ModMersenneWords`)
 showed `p`, a plain `Byte` parameter that should only ever be 13,
-17, 19, 31, or 61,reading as a garbage value partway through a
+17, 19, 31, or 61, reading as a garbage value partway through a
 run: 145 in one build, 53 in another, 41 in a third, each time
 internally self-consistent (the derived `fullWords`/`remBits` always
 matched the garbage `p` exactly) but never matching any actual
@@ -164,11 +158,12 @@ compilations:
   reproduced reliably for a given build, but the specific wrong value
   shifted whenever the surrounding code changed (145 -> 53 -> 41 across
   three diagnostic revisions).
-- **Free Pascal** (`fpc -Mtp`, native Linux target): Sanity check with a known, known.
-  compiled clean, all five test cases pass, zero corruption.
+- **Free Pascal** (`fpc -Mtp`, native Linux target): sanity check with
+  a known-good compiler, compiled clean, all five test cases pass,
+  zero corruption.
 - **Real Turbo Pascal 7.0 under DOSBox** (the actual TP7 compiler,
   emulated hardware): four separate runs, zero corruption, all five
-  tests pass every time. WTF?
+  tests pass every time.
 
 The turning point: recompiling the identical source from scratch on a
 *second, physically different* Pocket 386 unit produced byte-for-byte
@@ -179,20 +174,21 @@ signature of something fully deterministic, and ruled out a hardware
 fault as the cause.
 
 An independent memory diagnostic (CheckIt) did separately confirm a
-real, unrelated extended-memory parity fault on the first unit (see
-below), a genuine hardware issue, just not the one causing this bug.
+real, unrelated extended-memory fault on the first unit (see "Memory
+diagnostic detour" below), a genuine hardware issue, just not the one
+causing this bug.
 
-Turbo Debugger (once actually located,it had been present the whole
+Turbo Debugger (once actually located, it had been present the whole
 time) made the real cause visible directly: a loop counter (`k`) that
 should never exceed 7 was observed climbing past 130 in real time,
 because a `carry` variable held **16** at a point where hand-verified
 arithmetic said it should be exactly **0**. Disassembling the
-responsible line,`carry := prod shr 16`,showed it wasn't a shift
+responsible line, `carry := prod shr 16`, showed it wasn't a shift
 instruction at all, but a far call into Turbo Pascal's own
 (unsymboled, precompiled) runtime library at `455C:08B8`. That routine
 appears to return the wrong 16-bit half of a 32-bit value on this
 specific compiler/hardware combination, for a plain 32-bit
-shift-by-16,an operation used constantly throughout the bignum code.
+shift-by-16, an operation used constantly throughout the bignum code.
 
 **The fix**: bypass the runtime call entirely using a variant record
 (`TLongWords`) to read a `LongInt`'s high word directly via memory
@@ -218,18 +214,64 @@ scratch build is preserved as `701TEST.PAS` in this folder (see
 "Files" above) so anyone else running old Borland compilers on real
 386+ hardware can run the same check.
 
-## Hardware finding, independent of the above (still worth knowing)
+## Memory diagnostic detour (concluded)
 
-CheckIt (the real, period-appropriate DOS diagnostic, not the
-unrelated modern Windows product of the same name) found a genuine,
-reproducible extended-memory parity fault on the first Pocket 386
-unit,consistently on bit 3, at addresses sharing an identical
-low-order offset (`xxx704h`), across dozens of hits in a full test
-pass. This is unrelated to the bug above (which lived in conventional
-memory, in the stack) but is a real, separate hardware issue on that
-specific unit, worth factoring in if that machine is used for
-anything that touches extended memory (Windows, XMS-using software).
-The second unit's full CheckIt test came back clean.
+**Where it started.** While confirming CPU Check/Prime Check on the
+first Pocket 386 unit, an independent, period-appropriate DOS
+diagnostic (CheckIt) found a genuine, reproducible extended-memory
+fault, initially read as bit 3 stuck at specific addresses sharing an
+identical low-order offset (`xxx704h`). Not related to the SHR16
+compiler bug above (that lived in conventional memory, on the stack),
+a separate, real hardware issue on that one unit. The second unit's
+CheckIt run came back clean.
+
+**What got built chasing it.** What started as "does the existing XMS
+Scanner also catch this" grew into its own substantial diagnostic
+project: v1 fill/read-back patterns, then v2 (walking-bit, address-
+in-address, March C-) after v1 came back clean inside the fault's own
+address range, then AddrGallop (a purpose-built address-line test)
+after analyzing CheckIt's actual reported addresses revealed the real
+signature: every failing address shared the identical remainder
+modulo 8192 bytes (bit 13 of the address), the fingerprint of an
+unreliable address line, not a stuck data bit, matching CheckIt's own
+"Address Lines" failure classification. When AddrGallop came back
+clean too, the project went a level lower still: Direct Physical
+Test, using `INT 15h/AH=87h` to read and write literal physical
+addresses directly, bypassing XMS and HIMEM entirely, first as a
+single hardcoded pair, then a bulk chunk transfer, then generalized
+into full sweeps of the whole grabbed block.
+
+**What was actually learned.** The address-line fault is real and
+reproduced independently by both CheckIt (3.0 and v4) and, on one
+occasion, this project's own XMS Scanner (test 20, walk-0 bit 1,
+caught it twice). But every attempt to pin it down further ran into
+diminishing returns: single-word tests (AddrGallop, Direct Physical
+Test) stayed clean across the exact address CheckIt flagged and its
+bit-13 sibling, while only a full 1 KB bulk transfer ever caught it,
+suggesting either a genuinely intermittent fault or a bulk/sustained-
+access sensitivity that isolated single-word tests can't provoke. The
+final full-block mapping-verification sweep, built to settle whether
+this project's own "does the XMS block start at physical `0x100000`"
+assumption was even correct, failed at essentially every sampled
+point across the whole ~7 MB range, including regions CPU Check,
+Prime Check, and dozens of earlier XMS Scanner patterns had all
+independently confirmed clean. That pattern (uniform, total failure,
+everywhere) points at a bug in this project's own offset assumption,
+most likely HIMEM reserving some space before the first allocatable
+XMS byte, rather than newly-discovered widespread hardware corruption.
+That question was never resolved before the project was deliberately
+stopped here.
+
+**Decision.** Concluded. A mature, dedicated tool (CheckIt) already
+does this job well and remains the recommended way to diagnose memory
+on this hardware; reinventing it wasn't the point, and each fix raised
+a new, deeper question rather than converging on an answer. All of
+that code (XMS Scanner, AddrGallop, Direct Physical Test, and every
+supporting Python verification script) is preserved, working, and
+documented in its own project, [MemTest386](../MemTest386/), in case
+it's useful for reference or picked back up later as its own thing.
+Prime386 itself returns to its original, narrower scope: the CPU
+self-verifying stress test, plus the new Search feature.
 
 ## Status
 
@@ -238,197 +280,14 @@ option runs the known exponent set, compiles and runs clean on the
 physical Pocket 386, all five test cases pass, verified against a
 full diagnostic trace.
 
-**Stage 2 (menu, Prime Check, XMS Scanner), core testing complete
-and confirmed.** The menu and all three modes exist in `PRIME386.PAS`.
-XMS Scanner and Prime Check are both confirmed working on real
-hardware, zero faults on XMS Scanner's full-block run, zero mismatches
-across 105,590+ Prime Check sweeps. XMS Scanner now grabs every free
-block rather than only the single largest one (handles fragmented
-free memory), confirmed functionally correct on non-fragmented single-
-block cases; the actual multi-block aggregation path hasn't been
-exercised on real fragmented memory yet. No elapsed-time display or
-exit-summary logging yet.
+**Stage 2 (Prime Check), complete and confirmed.** Zero mismatches
+across 105,590+ sweeps of all 18 candidate exponents on real hardware.
 
-**XMS Scanner v2 patterns (walking-bit, address-in-address, March C-),
-written and Python-verified, not yet run on real hardware.** Added in
-response to the faulty-unit result below: a confirmed hardware fault
-sat inside a fully-covered v1 fill/read-back run and still came back
-clean, suggesting the simple pattern may not expose everything CheckIt
-catches. All three algorithms were verified against injected fault
-models in Python, including a direct transliteration of the actual
-Pascal structure (not just the underlying algorithm), which is how the
-address-in-address coupling limitation noted above was found. Adds
-meaningfully to scan time (34 fill patterns instead of 2, plus a full
-address-in-address pass, plus March C-'s 6-element sweep per block),
-worth knowing before running this on an overnight burn-in.
+**Stage 3 (Search), written and Python-verified, not yet run on real
+hardware.** Trial-division-derived Mersenne-exponent set matches the
+existing, hardware-confirmed `CandExp` table exactly.
 
-**Address-line fault identified, and a fourth test (AddrGallop
-Scanner) added specifically to target it.** After the v2 patterns
-themselves came back clean on four separate real-hardware runs on the
-faulty unit (three unattended XMS Scanner runs plus one watched run
-that reached the exact test that had earlier caught 26 errors, without
-catching anything), CheckIt itself was run directly, first CheckIt 3.0
-(German), then CheckIt v4 (English, easier to read). Both CheckIt
-versions confirmed the same fault, and both report it under Failure
-Class "Address Lines," not a data-bit or coupling fault. Analyzing the
-actual reported addresses (50 unique addresses across CheckIt v4's
-readout) found something concrete: every single one shares the
-identical low-order remainder `0x1704` modulo `0x2000` (8192 bytes,
-which is bit 13 of the byte address), and every gap between
-consecutive failing addresses is a multiple of 8192. That's the
-signature of address bit 13 being unreliable in the affected bands,
-addresses differing only in that bit alias to the same physical cell.
-
-None of the existing tests (v1 fill/read-back, walking-bit,
-address-in-address, or March C- at chunk granularity) can actually
-detect this specific fault: they either fill an entire chunk with one
-uniform value (so two aliased addresses inside that chunk already hold
-the same value, nothing to catch) or, for address-in-address, compare
-addresses that are at most 1 KB apart, while this fault's aliasing
-distance is 8 KB, larger than the whole chunk. A new, separate test
-(**AddrGallop Scanner**, its own menu option) was added: for a
-reference word address, write a distinct marker to it and to the same
-address with one bit toggled, then read both back and confirm neither
-corrupted the other. Tests bits 11-15 (2 KB-32 KB spacing) at an
-8192-byte stride, chosen because that stride lands exactly on all of
-the real reported addresses (checked directly against the CheckIt
-readout). Needs individual word-level XMS moves rather than the bulk
-chunk moves everything else in this file uses, so it's meaningfully
-slower per byte covered and was kept out of the 41-step XMS Scanner
-sequence deliberately. Verified in Python first, including a direct
-transliteration of the actual loop structure (bounds-checking near
-block edges, the stride loop, the bit range), against injected
-bit-13-style faults and against clean memory. Not yet run on real
-hardware.
-
-**AddrGallop ran clean on real hardware (all bits 11-15), which
-reopened the question of whether the block ever actually starts at
-physical `0x100000`.** Since bit 13 specifically, the one CheckIt's
-own addresses confirm, came back clean too, "wrong bit" is no longer
-a plausible explanation; block placement (the XMS handle's offset 0
-not actually lining up with the start of usable extended memory) is
-now the leading open question, unresolved since the very first XMS
-Scanner design. Added a "crawl" step to test it directly: **Direct
-Physical Test**, a new, deliberately minimal menu option that bypasses
-XMS and HIMEM entirely via `INT 15h, AH=87h` ("Move Block to/from
-Extended Memory"), which takes a literal 24-bit physical address, not
-an XMS handle. Tests exactly one hardcoded pair, `0x401704` and
-`0x403704` (bit 13 toggled), both independently present in CheckIt's
-own reported-address list, so there's no ambiguity about whether these
-are the right addresses to check.
-
-This is meaningfully riskier than anything else in the program: the
-BIOS call itself switches the CPU into protected mode and back, with
-interrupts disabled, to perform the move, and a malformed descriptor
-table produces a hang requiring a power cycle rather than a graceful
-error. The descriptor field layout was verified byte-for-byte against
-Ralf Brown's Interrupt List (table 00499): access rights byte `93h`,
-24-bit address as a low-word/high-byte pair, reserved word zeroed for
-286-compatible operation, confirmed programmatically
-(`gdt_layout_verify.py`) rather than trusted from memory. The actual
-protected-mode transition itself can't be verified outside real
-hardware, there's no way to simulate that in the sandbox. Not yet run.
-Deliberately scoped to a single hardcoded pair rather than a sweep
-("crawl, walk, run"), generalizing to a range comes later, once the
-mechanism itself is confirmed safe and working on this hardware.
-
-**Direct Physical Test ran clean on real hardware, ruling out block
-placement for good, but reopening a sharper question.** `0x401704`
-and `0x403704` (bit 13 toggled) both came back clean via the raw BIOS
-path, no XMS handle involved at all, so the long-standing worry that
-the grabbed XMS block might not start at physical `0x100000` is now
-settled: it isn't the explanation. In the same session, the XMS
-Scanner (still going through HIMEM) caught the fault again, for the
-first time with full offset logging: 4 failing words, all sharing the
-identical low-order remainder mod `0x2000` (the same bit-13 signature,
-just at a different low-order value than CheckIt's own readout, which
-is expected since these are chunk-aligned addresses rather than
-CheckIt's own internal test offset), and all four on test 20,
-walk-0 bit 1, the exact same test that caught the fault on the very
-first run. That test fills an entire 1 KB chunk with one uniform bulk
-value and moves all 512 words in one operation; both the crawl-step
-Direct Physical Test and AddrGallop only ever move one isolated word
-at a time. That's the one structural difference between what has and
-hasn't caught this fault so far, worth treating as the live lead
-rather than coincidence, given it's now 2-for-2 on the bulk test and
-2-for-2 clean on every single-word test including bit 13 itself.
-
-Added **Direct Physical Test, BULK** ("walk" step) to isolate exactly
-that variable: same `INT 15h/AH=87h` raw physical-address path as the
-crawl step, so still no XMS/HIMEM involved, but moving a full 1 KB
-(512 words) in one bulk call instead of one word. Target address
-(`0x3F9400`) and pattern (`$FFFD`, walk-0 bit 1) are both taken
-directly from the fault the XMS Scanner had just reported, not
-guessed. If this reproduces the fault, that confirms it's genuinely
-about bulk/sustained access rather than XMS/HIMEM specifically. If it
-stays clean too, the difference may be more specific still, tied to
-something about going through HIMEM's own move routine in particular,
-not just "more than one word at a time." Not yet run on real hardware.
-
-**Both single-point Direct Physical Tests ran clean on real
-hardware, which is real progress (block placement is ruled out for
-good, `0x401704` came straight from CheckIt's own readout, no
-assumption involved) but doesn't settle the bulk-vs-single-word
-question the way it first looked like it did.** `0x3F9400`, the bulk
-test's target, was derived from block-relative offset + `0x100000`,
-the very mapping assumption Direct Physical Test exists to eliminate,
-just reapplied without noticing. A clean result there proves nothing
-about bulk access specifically if it was quietly testing the wrong
-physical address to begin with.
-
-Generalized both tests from a single hardcoded point into a full
-sweep of the grabbed block ("run" step), cross-checking XMS-path
-writes against BIOS-direct-physical reads at every 1024-byte-strided
-point, not just one. Caught a real design flaw before it went anywhere
-near Pascal: the obvious marker (low 16 bits of the offset, the same
-scheme `TestChunkAddr` already uses for a different purpose) is
-periodic every 64 KB, so a mapping error that happened to be an exact
-multiple of 65536 bytes would slip past it, confirmed by simulation
-(only 64 of 7104 sample points caught a simulated 64 KB mapping error).
-Fixed by using the full 32-bit block-relative offset as a two-word
-marker instead, confirmed to catch that same error at every sample
-point with zero false positives on a correctly-mapped block
-(`mapping_verify.py`). The bulk sweep's chunk pattern was also
-adjusted: first two words carry the 32-bit offset marker, the rest of
-the chunk carries the known fault pattern (`$FFFD`), so it verifies
-mapping and re-exercises the suspected bulk-access mechanism in the
-same pass. Not yet run on real hardware.
-
-**Faulty-unit test (all three modes), passed, and coverage is now
-confirmed, not just assumed.** All three modes were run on the first
-Pocket 386 unit, the one CheckIt found a genuine extended-memory
-parity fault on (see "Hardware finding" above). CPU Check, Prime
-Check, and XMS Scanner all came back clean.
-
-That result needed a real coverage check before it could be trusted,
-since the XMS Scanner grabs the largest free block reported and there
-was no guarantee that block actually reached the address CheckIt
-flagged. Working it out: CheckIt's full test found 27 failing
-addresses (`401704h` through `47D704h`), all sharing the same low-order
-offset (`xxx704h`) and all failing on bit 3, clustering into two bands
-around 4.00 to 4.11 MB and 4.44 to 4.51 MB physical. Subtracting the
-1 MB start of extended memory (`100000h`) puts that fault band at
-roughly **3078 KB to 3574 KB into extended memory**. The scanner's
-run on that unit grabbed **7104 KB** in one contiguous block, which
-comfortably covers the fault band with over 3500 KB of margin on top.
-Assuming the handle's offset 0 lines up with the start of usable
-extended memory (the normal case for a single free block reported by
-the driver), the scan's address range did include the exact region
-CheckIt flagged.
-
-So this is a real result: the specific offset range is confirmed
-tested, not just assumed, and it still came back clean. That's worth
-sitting with rather than either dismissing or over-trusting. A
-hardware fault that CheckIt catches but a flat 0xAA/0x55 fill/
-read-back doesn't isn't a contradiction, it's a plausible sign that
-this fault needs a different test pattern to expose (see "Next steps"
-below), or that it's intermittent/marginal rather than consistently
-present. It doesn't mean the XMS Scanner's fill/read-back logic is
-broken, both the CPU Check and Prime Check paths are independently
-confirmed working, and the XMS Scanner's move/compare mechanics were
-separately confirmed clean on the known-good second unit.
-
-**The SHR16 compiler-bug investigation itself, independently confirmed
+**The SHR16 compiler-bug investigation, independently confirmed
 closed.** Tracked down a genuine copy of Turbo Pascal 7.01 (verified by
 its file timestamp, `03/03/93, 07:01:00`, matching the documented
 signature) and ran a scratch build reverting the `HiWord` fix back to
@@ -439,15 +298,16 @@ historical compiler, not just a workaround that sidesteps the
 question. Preserved as `701TEST.PAS` for anyone else in the same
 situation.
 
+**The memory diagnostic detour is concluded**, see above for the
+summary; full detail lives in [MemTest386](../MemTest386/).
+
 ## Next steps
 
-- Run the generalized Direct Physical Test sweeps (both single-word
-  and bulk) on real hardware, on the known-faulty first unit. This is
-  the actual settling test now: sweeps the whole grabbed block rather
-  than one point, so a clean result would mean something (mapping
-  confirmed across the full range, not just one spot), and any fault
-  caught would show exactly where, distinguishable from a pure mapping
-  error by whether it lines up with the already-known bit-13 signature.
+- Run Search on real hardware.
+- Consider extending Search's range beyond `MaxP` (61) toward the next
+  real Mersenne exponent (89), which needs a wider bignum (`NLIMB` > 4)
+  and fresh Python verification of the whole arithmetic stack at that
+  width before touching Pascal, a natural future step, not urgent.
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add exit-summary logging (final results only, no periodic writes,
   out of respect for the CF card).
@@ -474,32 +334,13 @@ situation.
 - Expanded into a menu-driven program: CPU Check (the original
   single-purpose core), Prime Check (a continuous stress loop over
   all 18 primes <= 61, checking each against its known correct
-  primality result), and XMS Scanner (extended-memory fill/read-back
-  test, v1 patterns only). The original single-purpose CPU-test
-  source was frozen as `Prime386-alpha.PAS` to preserve the exact
-  version the SHR16 saga is about. One compile error found and fixed
-  in the XMS Scanner (a `var` parameter can't be written to directly
-  from inline asm without an extra indirection step; replaced with a
-  global variable). XMS Scanner confirmed clean on real hardware
-  (zero faults across the largest available block, both patterns).
-  Prime Check confirmed clean on real hardware (100+ sweeps, zero
-  mismatches).
-- XMS Scanner reworked to grab every free block, largest-first, until
-  none remain (up to a 32-block safety cap), instead of only the
-  single largest block, so fragmented free memory gets covered too.
-  Tested on both Pocket 386 units and under Windows specifically to
-  try to force fragmentation; free XMS came back as one contiguous
-  block every time, so the loop's no-fragmentation path (grab one
-  block, next query returns 0, stop) is confirmed, but the actual
-  multi-block aggregation logic remains unexercised on real hardware.
-- Worked out the address math on the original faulty-unit clean run:
-  CheckIt's 27 failing addresses convert to roughly 3078 to 3574 KB
-  into extended memory, which the 7104 KB block that run grabbed
-  fully covers. So that clean result reflects genuine coverage of the
-  known fault's address range, not a coverage gap, raising walking-bit
-  and march-algorithm patterns from planned-but-unscheduled to a
-  priority next step, since a flat fill/read-back may not be
-  sufficient to expose this specific fault.
+  primality result), and an XMS Scanner (extended-memory fill/read-back
+  test). The original single-purpose CPU-test source was frozen as
+  `Prime386-alpha.PAS` to preserve the exact version the SHR16 saga is
+  about.
+- CheckIt (an independent, period-appropriate DOS diagnostic) found a
+  genuine, reproducible extended-memory fault on the first Pocket 386
+  unit. Confirmed the SHR16 compiler bug and this fault are unrelated.
 - Tracked down an actual copy of Turbo Pascal 7.01, confirmed genuine
   by its file timestamp (03/03/93, 07:01:00, matching the documented
   signature for the disk-mastering batch). Built a scratch diagnostic
@@ -510,51 +351,26 @@ situation.
   rather than a workaround. Preserved as `701TEST.PAS` so anyone else
   running old Borland compilers on real 386+ hardware can check their
   own.
-- Added XMS Scanner v2: walking-1/walking-0 patterns for all 16 bit
-  positions, an address-in-address pattern (each word's data is its
-  own byte offset), and a March C- implementation adapted to chunk
-  rather than word granularity. Factored the raw XMS move calls out of
-  the old single `TestChunk` into reusable `XMSMoveUp`/`XMSMoveDown`
-  functions so the new patterns (which need read-before-write, not
-  just write-then-read) could share them instead of duplicating the
-  asm. All three verified in Python against injected fault models
-  before writing any Pascal, including a direct transliteration of the
-  actual Pascal structure (`pascal_translit_verify.py`), which surfaced
-  a real limitation: address-in-address, as a single write-then-read
-  pass with no revisit, cannot catch coupling between two different
-  chunks in either direction; only March C-'s repeated read-before-
-  write sweeps do that. Documented that distinction directly in the
-  source rather than only in this file. None of the v2 patterns have
-  run on real hardware yet.
-- Added a per-test progress header (centered, its own line, "test
-  N/Total") and a per-test fault log (offset, KB into block, and an
-  estimated absolute address in CheckIt's own hex style) to the XMS
-  Scanner, plus an on-disk fault log (`XMSFAULT.LOG`, appends across
-  runs, errors only, nothing written for a clean pass).
-- Ran the v2 XMS Scanner on the known-faulty first unit: three
-  unattended runs and one watched run (specifically reaching the exact
-  test, walk-0 bit 1, that had earlier caught 26 errors) all came back
-  clean. Ran CheckIt directly instead, first 3.0 (German), then v4
-  (English, via a CD-ROM release bundling CheckIt 4 for DOS). Both
-  reproduced the fault, both reporting it under Failure Class "Address
-  Lines." Analyzed the actual reported addresses from the v4 readout
-  (50 unique addresses): all share the identical low-order remainder
-  `0x1704` modulo `0x2000` (8192 bytes, bit 13 of the byte address),
-  and every gap between consecutive failures is a multiple of 8192,
-  the signature of an unreliable address line, not a data-bit or
-  simple coupling fault. This also explains why none of the existing
-  tests caught it: the v1/walking-bit patterns fill an entire chunk
-  with one uniform value (so an alias within that chunk has nothing to
-  disagree with), and address-in-address only ever compares addresses
-  within the same 1 KB chunk, while this fault's aliasing distance is
-  8 KB. Added AddrGallop Scanner, a new, separate menu option (word-
-  level XMS moves, much slower per byte than the bulk chunk tests, so
-  deliberately kept out of the 41-step sequence): for a reference
-  address, write a marker to it and to the same address with one bit
-  toggled, then read both back and confirm neither corrupted the
-  other. Tests bits 11-15 at an 8192-byte stride, the stride chosen
-  because it lands exactly on all of the real reported addresses,
-  checked directly against the CheckIt readout. Verified in Python
-  first (`addrgallop_verify.py`, `addrgallop_pascal_translit.py`)
-  against injected bit-13-style faults, clean memory, and the actual
-  Pascal loop's boundary-skipping logic. Not yet run on real hardware.
+- Began a memory-diagnostic detour chasing the CheckIt-found fault
+  further than the original XMS Scanner could: v2 fill patterns
+  (walking-bit, address-in-address, March C-), AddrGallop (an
+  address-line-specific test after analyzing CheckIt's own reported
+  addresses revealed a bit-13 signature), and Direct Physical Test
+  (bypassing XMS/HIMEM entirely via raw BIOS physical-address access,
+  single-word then bulk then full-block sweeps). Extensive real-
+  hardware testing across all of these reproduced the fault
+  inconsistently and raised an unresolved question about this
+  project's own offset-mapping assumptions, without ever fully
+  characterizing the fault. See "Memory diagnostic detour" above for
+  the summary.
+- **Scope refocus.** Decided the memory-diagnostic direction was
+  feature creep relative to Prime386's actual purpose (a Prime95
+  analogue, not a general memory diagnostic suite, a job CheckIt
+  already does well). Extracted all of that code, working and intact,
+  into its own project, `MemTest386`, preserved for reference. Added
+  **Search**, a genuine open-ended scan (trial-division-checked
+  exponents, no lookup table) rather than Prime Check's fixed self-
+  verifying set, closer to what GIMPS' own search actually does, even
+  though this hardware's bignum width means it can only ever rediscover
+  already-long-known results. `PRIME386.PAS` returns to CPU/arithmetic-
+  only scope: CPU Check, Prime Check, Search.
