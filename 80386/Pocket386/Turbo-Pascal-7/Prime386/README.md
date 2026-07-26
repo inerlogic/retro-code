@@ -95,3 +95,5 @@ It was fixed five months later, in March of 1993, in a release Borland called 7.
 So: thirty-three years. That is how long this specific bug has been sitting quietly in a piece of software, fixed, documented, entirely knowable, waiting for someone to need to know about it badly enough to go looking. A Pocket 386, several thousand miles and several decades removed from Borland's original engineers, turned out to be the thing that finally needed to know.
 
 Nobody involved was the last to find out. As it happens, everybody, this whole time, could simply have asked.
+
+I've since downloaded Turbo Pascal 7.01, confirmed the download was correct and the bug fixed because nothing in the file says "HELLO! I'M 7.01" and added '701TEST.PAS' so you can check your Turbo Pascal 7.0 on your 386...

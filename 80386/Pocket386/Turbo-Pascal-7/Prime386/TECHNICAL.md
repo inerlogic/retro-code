@@ -25,6 +25,13 @@ out, using pure integer/bignum arithmetic instead.
   specific version [THE-SHR16-SAGA.md](README.md) is about. Not
   maintained going forward; `PRIME386.PAS` is where active work
   happens.
+- **`701TEST.PAS`** — a standalone diagnostic, deliberately reintroduces
+  the historical SHR-16 bug (see "Resolved" below) so anyone running
+  Turbo/Borland Pascal on real 386+ hardware can check whether their
+  own compiler has it. All five tests should read PASS if the compiler
+  is 7.01 or otherwise unaffected; corruption or failure suggests 7.00
+  or earlier. Must be run on real hardware, not an emulator, see the
+  file's own header for details.
 
 ## Menu design
 
@@ -174,6 +181,21 @@ confirmed on real hardware: a full run (all five test exponents,
 every intermediate value matching hand-verified math from earlier in
 this investigation.
 
+**Independent confirmation, months later, against the actual 7.01
+build.** Located a copy of Turbo Pascal 7.01 itself (the "silent
+maintenance release" that fixed this, per emsps.com/oldtools/borpasv.htm,
+timestamped 03/03/93, 07:01:00, matching the documented signature) and
+tested it directly: a scratch build with the `HiWord` fix deliberately
+reverted back to the plain, historically-buggy `carry := prod shr 16`
+line, compiled and run on real Pocket 386 hardware under genuine 7.01.
+Came back clean, bug-free, no corruption. That's a real reproduction
+of a 33-year-old documented compiler bug and its fix, on the actual
+hardware class it affected, using the actual compiler that fixed it,
+not just a workaround that happens to sidestep the question. That
+scratch build is preserved as `701TEST.PAS` in this folder (see
+"Files" above) so anyone else running old Borland compilers on real
+386+ hardware can run the same check.
+
 ## Hardware finding, independent of the above (still worth knowing)
 
 CheckIt (the real, period-appropriate DOS diagnostic, not the
@@ -299,3 +321,13 @@ separately confirmed clean on the known-good second unit.
   and march-algorithm patterns from planned-but-unscheduled to a
   priority next step, since a flat fill/read-back may not be
   sufficient to expose this specific fault.
+- Tracked down an actual copy of Turbo Pascal 7.01, confirmed genuine
+  by its file timestamp (03/03/93, 07:01:00, matching the documented
+  signature for the disk-mastering batch). Built a scratch diagnostic
+  reverting the `HiWord` fix back to the original buggy `shr 16` line,
+  compiled and ran it on real Pocket 386 hardware under 7.01: clean,
+  no corruption. Independent, real-hardware confirmation of both the
+  original bug and Borland's fix, using the actual historical compiler
+  rather than a workaround. Preserved as `701TEST.PAS` so anyone else
+  running old Borland compilers on real 386+ hardware can check their
+  own.
