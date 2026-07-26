@@ -1426,6 +1426,427 @@ begin
   ReadKey;
 end;
 
+{ ------------------ Direct Physical Test (EXPERIMENTAL) ------------------ }
+{ "Crawl" step of crawl/walk/run: a single hardcoded address pair, tested }
+{ once, no loop, no sweep. Bypasses XMS and HIMEM entirely, using          }
+{ INT 15h/AH=87h ("Move Block to/from Extended Memory") to move data       }
+{ to/from a literal 24-bit physical address. This exists specifically to  }
+{ settle whether the AddrGallop Scanner's clean runs mean the fault is     }
+{ genuinely gone, or whether the grabbed XMS block simply never started   }
+{ at physical 0x100000 the way every prior test has assumed. Going        }
+{ through INT 15h directly removes that assumption: 0x401704 below is the}
+{ literal physical address, not a block-relative offset run through an    }
+{ unverified XMS handle.                                                  }
+{                                                                          }
+{ RISK, stated plainly: this is meaningfully more dangerous than anything }
+{ else in this file. INT 15h/87h has the BIOS itself switch the CPU into  }
+{ protected mode and back, with interrupts disabled, to perform the move. }
+{ A malformed descriptor table produces a hang requiring a power cycle,   }
+{ not a graceful error, there is no way to verify the actual protected-   }
+{ mode transition from the development sandbox, only the descriptor       }
+{ field layout (confirmed against Ralf Brown's Interrupt List, table       }
+{ 00499: access rights byte 93h, 24-bit address low-byte-first as a       }
+{ Word+Byte pair, reserved word zeroed for 286-compatible operation) and  }
+{ the higher-level marker/readback logic, which is the same proven        }
+{ technique as TestAddrPair, just addressed differently.                  }
+{                                                                          }
+{ Targets 0x401704 and 0x403704 (bit 13 toggled), both independently       }
+{ confirmed bad by CheckIt's own readout, not a guess. }
+type
+  TGDTDescriptor = packed record
+    Limit:        Word;
+    BaseLow:      Word;   { low 16 bits of the 24-bit physical address }
+    BaseHigh:     Byte;   { high 8 bits of the 24-bit physical address }
+    AccessRights: Byte;
+    Reserved:     Word;
+  end;
+
+  TBlockMoveGDT = packed record
+    Dummy:   TGDTDescriptor;  { offset 00h, must be zero }
+    GDTSelf: TGDTDescriptor;  { offset 08h, must be zero, BIOS fills in }
+    Source:  TGDTDescriptor;  { offset 10h }
+    Dest:    TGDTDescriptor;  { offset 18h }
+    BiosCS:  TGDTDescriptor;  { offset 20h, must be zero, BIOS fills in }
+    BiosSS:  TGDTDescriptor;  { offset 28h, must be zero, BIOS fills in }
+  end;
+
+const
+  GDTAccessRights = $93;  { present, ring 0, read/write data segment,   }
+                          { per Ralf Brown's Interrupt List table 00499 }
+
+var
+  BlockGDT: TBlockMoveGDT;
+  LocalWordBuf: Word;
+
+procedure SetGDTDescriptor(var d: TGDTDescriptor; PhysAddr: LongInt; SizeBytes: Word);
+begin
+  d.Limit        := SizeBytes - 1;
+  d.BaseLow      := Word(PhysAddr and $FFFF);
+  d.BaseHigh     := Byte((PhysAddr shr 16) and $FF);
+  d.AccessRights := GDTAccessRights;
+  d.Reserved     := 0;
+end;
+
+{ Moves WordCount words from SourcePhys to DestPhys via INT 15h/AH=87h.   }
+{ Returns the BIOS AH status code: 0 = success, 1 = parity error,          }
+{ 2 = exception/interrupt error, 3 = A20 gating failed. WordCount is       }
+{ capped by the BIOS call itself at 8000h (32768) words; ChunkWords (512) }
+{ is well inside that, so no chunking-within-a-call is needed here. }
+function BiosMoveBlock(SourcePhys, DestPhys: LongInt; WordCount: Word): Byte;
+var
+  AHResult: Byte;
+begin
+  FillChar(BlockGDT, SizeOf(BlockGDT), 0);
+  SetGDTDescriptor(BlockGDT.Source, SourcePhys, WordCount * 2);
+  SetGDTDescriptor(BlockGDT.Dest, DestPhys, WordCount * 2);
+  asm
+    push es
+    push si
+    push ds
+    pop  es
+    lea  si, BlockGDT
+    mov  cx, WordCount
+    mov  ah, $87
+    int  $15
+    mov  AHResult, ah
+    pop  si
+    pop  es
+  end;
+  BiosMoveBlock := AHResult;
+end;
+
+{ Single-word convenience wrapper, kept so RunDirectPhysTest (the "crawl"  }
+{ step) didn't need to change when this was generalized for the "walk"    }
+{ step below. }
+function BiosMoveWord(SourcePhys, DestPhys: LongInt): Byte;
+begin
+  BiosMoveWord := BiosMoveBlock(SourcePhys, DestPhys, 1);
+end;
+
+function PhysAddrOfWordBuf: LongInt;
+begin
+  PhysAddrOfWordBuf := LongInt(Seg(LocalWordBuf)) shl 4 + Ofs(LocalWordBuf);
+end;
+
+function PhysAddrOfChunkBuf: LongInt;
+begin
+  PhysAddrOfChunkBuf := LongInt(Seg(ChunkBuf)) shl 4 + Ofs(ChunkBuf);
+end;
+
+function PhysAddrOfCheckBuf: LongInt;
+begin
+  PhysAddrOfCheckBuf := LongInt(Seg(CheckBuf)) shl 4 + Ofs(CheckBuf);
+end;
+
+{ ---------------- Direct Physical Test (EXPERIMENTAL) ---------------- }
+{ Generalized from a single hardcoded pair into a full sweep of the      }
+{ grabbed XMS block, "run" step of crawl/walk/run. The single-pair       }
+{ version (testing 0x401704 against bit 13) and the single-chunk bulk     }
+{ version (testing 0x3F9400 with the walk-0 bit 1 pattern) both came back}
+{ clean on real hardware. But those results only speak to the ONE point  }
+{ each tested, and reasoning from "this one point is clean" to "bulk vs. }
+{ single-word doesn't matter" quietly smuggled back in the very           }
+{ assumption Direct Physical Test was built to eliminate: 0x3F9400 came   }
+{ from block-relative offset + 0x100000, the same unverified mapping      }
+{ assumption as always, just applied to a different test. This sweep     }
+{ checks that assumption directly, at every sampled point across the      }
+{ WHOLE block, not just one, by writing via the normal XMS path and       }
+{ reading back via the raw BIOS physical-address path.                    }
+{                                                                          }
+{ Marker design, fixed after a Python check caught a real blind spot      }
+{ (mapping_verify.py): a naive low-16-bits-of-offset marker (the same     }
+{ scheme TestChunkAddr already uses, for a different purpose) is          }
+{ periodic every 64 KB, so a mapping error that happens to BE an exact    }
+{ multiple of 65536 bytes would slip past it entirely, confirmed by       }
+{ simulation: only 64 of 7104 sample points caught a 64 KB mapping error. }
+{ Fixed by using the FULL block-relative offset as a 32-bit (two-word)    }
+{ marker instead of just its low 16 bits, confirmed to catch that same    }
+{ error at every sample point, with zero false positives on a correctly-  }
+{ mapped block. }
+{                                                                          }
+{ RISK note carries over unchanged from the single-point version: this   }
+{ goes through INT 15h/AH=87h, the BIOS switches to protected mode and    }
+{ back with interrupts disabled to do each move, a malformed request      }
+{ hangs the machine rather than erroring gracefully. Every address and    }
+{ descriptor here is computed, not user input, so the risk is the same    }
+{ as the already-confirmed-safe single-point version, just repeated many  }
+{ times in a loop instead of once. }
+const
+  DirectSweepStride = 1024;  { bytes; matches ChunkWords granularity used }
+                              { elsewhere, same order-of-magnitude sample }
+                              { count as the other full-block scanners.   }
+  BulkTestPattern = $FFFD;   { walk-0 bit 1: the exact pattern that has   }
+                              { caught the fault twice via the XMS path.  }
+
+procedure RunDirectPhysTest;
+var
+  BlockHandle: array[1..MaxXMSBlocks] of Word;
+  BlockKB:     array[1..MaxXMSBlocks] of Word;
+  NumBlocks:   Integer;
+  TotalKBGrabbed: LongInt;
+  LargestKB: Word;
+  allocFailed: Boolean;
+  faults: LongInt;
+  stopRequested: Boolean;
+  refOffset, blockBytes, assumedPhysLow, assumedPhysHigh: LongInt;
+  b: Integer;
+  low, high, gotLow, gotHigh: Word;
+  ok: Boolean;
+begin
+  WriteLn;
+  WriteLn('--- Direct Physical Test: full sweep, single-word (EXPERIMENTAL) ---');
+  WriteLn('Cross-checks XMS-path writes against BIOS-direct physical reads,');
+  WriteLn('at every ', DirectSweepStride, '-byte-strided point across the');
+  WriteLn('whole grabbed block. RISK: a malformed request can hang the');
+  WriteLn('machine, requiring a power cycle.');
+  WriteLn('Press any key to proceed, or Ctrl-Break to abort before it starts.');
+  ReadKey;
+  WriteLn;
+
+  if not XMSPresent then
+  begin
+    WriteLn('No XMS driver detected (INT 2Fh, AX=4300h did not return AL=80h).');
+    WriteLn('Press any key to return to menu.');
+    ReadKey;
+    Exit;
+  end;
+
+  GetXMSEntry;
+  NumBlocks := 0;
+  TotalKBGrabbed := 0;
+  allocFailed := False;
+
+  repeat
+    LargestKB := XMSQueryLargestKB;
+    if LargestKB < 1 then Break;
+    if NumBlocks >= MaxXMSBlocks then Break;
+    if not XMSAllocate(LargestKB) then
+    begin
+      allocFailed := True;
+      Break;
+    end;
+    Inc(NumBlocks);
+    BlockHandle[NumBlocks] := AllocHandle;
+    BlockKB[NumBlocks]     := LargestKB;
+    Inc(TotalKBGrabbed, LargestKB);
+  until False;
+
+  if NumBlocks = 0 then
+  begin
+    WriteLn('Nothing usable to test.');
+    WriteLn('Press any key to return to menu.');
+    ReadKey;
+    Exit;
+  end;
+
+  WriteLn('Grabbed ', NumBlocks, ' block(s), ', TotalKBGrabbed, ' KB total.');
+  if NumBlocks > 1 then
+    WriteLn('NOTE: only block 1 is tested, physical base is only assumed for',
+            ' the first block grabbed; blocks 2+ have no basis for a',
+            ' physical-address guess at all and are skipped.');
+  WriteLn;
+
+  OpenFaultLog;
+  if not LogAvailable then
+    WriteLn('(Could not open ', LogFileName, ', continuing without file logging.)');
+
+  faults := 0;
+  stopRequested := False;
+  blockBytes := LongInt(BlockKB[1]) * 1024;
+
+  PrintTestHeader(1, 1, 'mapping sweep (single-word, 32-bit marker)');
+  ResetFaultLog;
+
+  refOffset := 0;
+  while (refOffset < blockBytes) and not stopRequested do
+  begin
+    low  := Word(refOffset and $FFFF);
+    high := Word((refOffset shr 16) and $FFFF);
+
+    XMSMoveWordUp(BlockHandle[1], refOffset, low);
+    XMSMoveWordUp(BlockHandle[1], refOffset + 2, high);
+
+    assumedPhysLow  := $100000 + refOffset;
+    assumedPhysHigh := $100000 + refOffset + 2;
+    BiosMoveWord(assumedPhysLow, PhysAddrOfWordBuf);
+    gotLow := LocalWordBuf;
+    BiosMoveWord(assumedPhysHigh, PhysAddrOfWordBuf);
+    gotHigh := LocalWordBuf;
+
+    ok := (gotLow = low) and (gotHigh = high);
+    if ok then Write('.')
+    else
+    begin
+      Write('X');
+      Inc(faults);
+      LogFault(refOffset);
+    end;
+
+    if KeyPressed then
+      if ReadKey = #27 then stopRequested := True;
+
+    Inc(refOffset, DirectSweepStride);
+  end;
+  WriteLn;
+  PrintFaultLog(1, 1, 1, 'mapping sweep (single-word)');
+
+  WriteLn;
+  if stopRequested then
+    WriteLn('Run stopped by user request.')
+  else
+    WriteLn('Sweep complete.');
+  WriteLn('Total faults: ', faults, ' (mapping mismatches or genuine data faults,');
+  WriteLn('not distinguished by this test alone).');
+
+  for b := 1 to NumBlocks do
+    XMSFree(BlockHandle[b]);
+  CloseFaultLog;
+
+  WriteLn;
+  WriteLn('Press any key to return to menu.');
+  ReadKey;
+end;
+
+{ ------------- Direct Physical Test, BULK (EXPERIMENTAL) -------------- }
+{ Same generalization as above, applied to the bulk version: instead of  }
+{ one hardcoded chunk, sweeps every chunk-aligned point across the whole }
+{ grabbed block. Each chunk's first two words carry the same 32-bit      }
+{ offset marker as the single-word sweep (unambiguous, no 64 KB blind    }
+{ spot), and the REST of the chunk is filled with the known fault         }
+{ pattern ($FFFD, walk-0 bit 1, the exact pattern that has caught the     }
+{ fault twice via the XMS path) so this sweep does double duty: verifying}
+{ the mapping assumption AND re-exercising the actual suspected bulk-     }
+{ access mechanism, via a completely different path (XMS write, raw-BIOS }
+{ bulk read) than anything tried before. Same risk note as above. }
+procedure RunDirectPhysBulkTest;
+var
+  BlockHandle: array[1..MaxXMSBlocks] of Word;
+  BlockKB:     array[1..MaxXMSBlocks] of Word;
+  NumBlocks:   Integer;
+  TotalKBGrabbed: LongInt;
+  LargestKB: Word;
+  allocFailed: Boolean;
+  faults: LongInt;
+  stopRequested: Boolean;
+  refOffset, blockBytes, assumedPhys: LongInt;
+  b: Integer;
+  i, mismatches: Integer;
+  ok: Boolean;
+begin
+  WriteLn;
+  WriteLn('--- Direct Physical Test: full sweep, BULK (EXPERIMENTAL) ---');
+  WriteLn('Cross-checks XMS-path bulk writes against BIOS-direct physical bulk');
+  WriteLn('reads, at every chunk across the whole grabbed block. RISK: a');
+  WriteLn('malformed request can hang the machine, requiring a power cycle.');
+  WriteLn('Press any key to proceed, or Ctrl-Break to abort before it starts.');
+  ReadKey;
+  WriteLn;
+
+  if not XMSPresent then
+  begin
+    WriteLn('No XMS driver detected (INT 2Fh, AX=4300h did not return AL=80h).');
+    WriteLn('Press any key to return to menu.');
+    ReadKey;
+    Exit;
+  end;
+
+  GetXMSEntry;
+  NumBlocks := 0;
+  TotalKBGrabbed := 0;
+  allocFailed := False;
+
+  repeat
+    LargestKB := XMSQueryLargestKB;
+    if LargestKB < 1 then Break;
+    if NumBlocks >= MaxXMSBlocks then Break;
+    if not XMSAllocate(LargestKB) then
+    begin
+      allocFailed := True;
+      Break;
+    end;
+    Inc(NumBlocks);
+    BlockHandle[NumBlocks] := AllocHandle;
+    BlockKB[NumBlocks]     := LargestKB;
+    Inc(TotalKBGrabbed, LargestKB);
+  until False;
+
+  if NumBlocks = 0 then
+  begin
+    WriteLn('Nothing usable to test.');
+    WriteLn('Press any key to return to menu.');
+    ReadKey;
+    Exit;
+  end;
+
+  WriteLn('Grabbed ', NumBlocks, ' block(s), ', TotalKBGrabbed, ' KB total.');
+  if NumBlocks > 1 then
+    WriteLn('NOTE: only block 1 is tested, same reasoning as the single-word',
+            ' sweep above.');
+  WriteLn;
+
+  OpenFaultLog;
+  if not LogAvailable then
+    WriteLn('(Could not open ', LogFileName, ', continuing without file logging.)');
+
+  faults := 0;
+  stopRequested := False;
+  blockBytes := LongInt(BlockKB[1]) * 1024;
+
+  PrintTestHeader(1, 1, 'mapping sweep (bulk, 32-bit marker + fault pattern)');
+  ResetFaultLog;
+
+  refOffset := 0;
+  while (refOffset < blockBytes) and not stopRequested do
+  begin
+    ChunkBuf[0] := Word(refOffset and $FFFF);
+    ChunkBuf[1] := Word((refOffset shr 16) and $FFFF);
+    for i := 2 to ChunkWords - 1 do ChunkBuf[i] := BulkTestPattern;
+
+    XMSMoveUp(BlockHandle[1], refOffset);
+
+    assumedPhys := $100000 + refOffset;
+    BiosMoveBlock(assumedPhys, PhysAddrOfCheckBuf, ChunkWords);
+
+    mismatches := 0;
+    if CheckBuf[0] <> Word(refOffset and $FFFF) then Inc(mismatches);
+    if CheckBuf[1] <> Word((refOffset shr 16) and $FFFF) then Inc(mismatches);
+    for i := 2 to ChunkWords - 1 do
+      if CheckBuf[i] <> BulkTestPattern then Inc(mismatches);
+
+    ok := (mismatches = 0);
+    if ok then Write('.')
+    else
+    begin
+      Write('X');
+      Inc(faults);
+      LogFault(refOffset);
+    end;
+
+    if KeyPressed then
+      if ReadKey = #27 then stopRequested := True;
+
+    Inc(refOffset, DirectSweepStride);
+  end;
+  WriteLn;
+  PrintFaultLog(1, 1, 1, 'mapping sweep (bulk)');
+
+  WriteLn;
+  if stopRequested then
+    WriteLn('Run stopped by user request.')
+  else
+    WriteLn('Sweep complete.');
+  WriteLn('Total faults: ', faults, ' (chunks with at least one mismatched word,');
+  WriteLn('mapping or genuine data fault, not distinguished by this test alone).');
+
+  for b := 1 to NumBlocks do
+    XMSFree(BlockHandle[b]);
+  CloseFaultLog;
+
+  WriteLn;
+  WriteLn('Press any key to return to menu.');
+  ReadKey;
+end;
+
 { ------------------------------ main menu ------------------------------ }
 
 procedure ShowMenu;
@@ -1437,7 +1858,9 @@ begin
   WriteLn('  2) Prime Check (continuous stress loop)');
   WriteLn('  3) XMS Scanner');
   WriteLn('  4) AddrGallop Scanner (address-line test)');
-  WriteLn('  5) Quit to DOS');
+  WriteLn('  5) Direct Physical Test, single-word (EXPERIMENTAL)');
+  WriteLn('  6) Direct Physical Test, BULK (EXPERIMENTAL)');
+  WriteLn('  7) Quit to DOS');
   WriteLn;
   Write('Choice: ');
 end;
@@ -1458,7 +1881,9 @@ begin
       '2': RunPrimeCheck;
       '3': RunXMSScanner;
       '4': RunAddrGallopScanner;
-      '5': Done := True;
+      '5': RunDirectPhysTest;
+      '6': RunDirectPhysBulkTest;
+      '7': Done := True;
     end;
   end;
 end.

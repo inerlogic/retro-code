@@ -301,6 +301,99 @@ block edges, the stride loop, the bit range), against injected
 bit-13-style faults and against clean memory. Not yet run on real
 hardware.
 
+**AddrGallop ran clean on real hardware (all bits 11-15), which
+reopened the question of whether the block ever actually starts at
+physical `0x100000`.** Since bit 13 specifically, the one CheckIt's
+own addresses confirm, came back clean too, "wrong bit" is no longer
+a plausible explanation; block placement (the XMS handle's offset 0
+not actually lining up with the start of usable extended memory) is
+now the leading open question, unresolved since the very first XMS
+Scanner design. Added a "crawl" step to test it directly: **Direct
+Physical Test**, a new, deliberately minimal menu option that bypasses
+XMS and HIMEM entirely via `INT 15h, AH=87h` ("Move Block to/from
+Extended Memory"), which takes a literal 24-bit physical address, not
+an XMS handle. Tests exactly one hardcoded pair, `0x401704` and
+`0x403704` (bit 13 toggled), both independently present in CheckIt's
+own reported-address list, so there's no ambiguity about whether these
+are the right addresses to check.
+
+This is meaningfully riskier than anything else in the program: the
+BIOS call itself switches the CPU into protected mode and back, with
+interrupts disabled, to perform the move, and a malformed descriptor
+table produces a hang requiring a power cycle rather than a graceful
+error. The descriptor field layout was verified byte-for-byte against
+Ralf Brown's Interrupt List (table 00499): access rights byte `93h`,
+24-bit address as a low-word/high-byte pair, reserved word zeroed for
+286-compatible operation, confirmed programmatically
+(`gdt_layout_verify.py`) rather than trusted from memory. The actual
+protected-mode transition itself can't be verified outside real
+hardware, there's no way to simulate that in the sandbox. Not yet run.
+Deliberately scoped to a single hardcoded pair rather than a sweep
+("crawl, walk, run"), generalizing to a range comes later, once the
+mechanism itself is confirmed safe and working on this hardware.
+
+**Direct Physical Test ran clean on real hardware, ruling out block
+placement for good, but reopening a sharper question.** `0x401704`
+and `0x403704` (bit 13 toggled) both came back clean via the raw BIOS
+path, no XMS handle involved at all, so the long-standing worry that
+the grabbed XMS block might not start at physical `0x100000` is now
+settled: it isn't the explanation. In the same session, the XMS
+Scanner (still going through HIMEM) caught the fault again, for the
+first time with full offset logging: 4 failing words, all sharing the
+identical low-order remainder mod `0x2000` (the same bit-13 signature,
+just at a different low-order value than CheckIt's own readout, which
+is expected since these are chunk-aligned addresses rather than
+CheckIt's own internal test offset), and all four on test 20,
+walk-0 bit 1, the exact same test that caught the fault on the very
+first run. That test fills an entire 1 KB chunk with one uniform bulk
+value and moves all 512 words in one operation; both the crawl-step
+Direct Physical Test and AddrGallop only ever move one isolated word
+at a time. That's the one structural difference between what has and
+hasn't caught this fault so far, worth treating as the live lead
+rather than coincidence, given it's now 2-for-2 on the bulk test and
+2-for-2 clean on every single-word test including bit 13 itself.
+
+Added **Direct Physical Test, BULK** ("walk" step) to isolate exactly
+that variable: same `INT 15h/AH=87h` raw physical-address path as the
+crawl step, so still no XMS/HIMEM involved, but moving a full 1 KB
+(512 words) in one bulk call instead of one word. Target address
+(`0x3F9400`) and pattern (`$FFFD`, walk-0 bit 1) are both taken
+directly from the fault the XMS Scanner had just reported, not
+guessed. If this reproduces the fault, that confirms it's genuinely
+about bulk/sustained access rather than XMS/HIMEM specifically. If it
+stays clean too, the difference may be more specific still, tied to
+something about going through HIMEM's own move routine in particular,
+not just "more than one word at a time." Not yet run on real hardware.
+
+**Both single-point Direct Physical Tests ran clean on real
+hardware, which is real progress (block placement is ruled out for
+good, `0x401704` came straight from CheckIt's own readout, no
+assumption involved) but doesn't settle the bulk-vs-single-word
+question the way it first looked like it did.** `0x3F9400`, the bulk
+test's target, was derived from block-relative offset + `0x100000`,
+the very mapping assumption Direct Physical Test exists to eliminate,
+just reapplied without noticing. A clean result there proves nothing
+about bulk access specifically if it was quietly testing the wrong
+physical address to begin with.
+
+Generalized both tests from a single hardcoded point into a full
+sweep of the grabbed block ("run" step), cross-checking XMS-path
+writes against BIOS-direct-physical reads at every 1024-byte-strided
+point, not just one. Caught a real design flaw before it went anywhere
+near Pascal: the obvious marker (low 16 bits of the offset, the same
+scheme `TestChunkAddr` already uses for a different purpose) is
+periodic every 64 KB, so a mapping error that happened to be an exact
+multiple of 65536 bytes would slip past it, confirmed by simulation
+(only 64 of 7104 sample points caught a simulated 64 KB mapping error).
+Fixed by using the full 32-bit block-relative offset as a two-word
+marker instead, confirmed to catch that same error at every sample
+point with zero false positives on a correctly-mapped block
+(`mapping_verify.py`). The bulk sweep's chunk pattern was also
+adjusted: first two words carry the 32-bit offset marker, the rest of
+the chunk carries the known fault pattern (`$FFFD`), so it verifies
+mapping and re-exercises the suspected bulk-access mechanism in the
+same pass. Not yet run on real hardware.
+
 **Faulty-unit test (all three modes), passed, and coverage is now
 confirmed, not just assumed.** All three modes were run on the first
 Pocket 386 unit, the one CheckIt found a genuine extended-memory
@@ -348,15 +441,13 @@ situation.
 
 ## Next steps
 
-- Run the new AddrGallop Scanner on real hardware, on the known-faulty
-  first unit specifically, targeting the confirmed range (CheckIt v4's
-  actual readout spans `0x401704` to `0x467704`, roughly 4.00-4.40 MB
-  physical, as one continuous run of 8192-byte-spaced failures, not
-  clearly split into the original two-band description from the
-  earlier CheckIt 3.0 pass). This is the first test built with the
-  actual fault mechanism (an address-line alias at 8192-byte spacing)
-  in mind, rather than a general-purpose pattern, so it's the best
-  current candidate for actually reproducing what CheckIt catches.
+- Run the generalized Direct Physical Test sweeps (both single-word
+  and bulk) on real hardware, on the known-faulty first unit. This is
+  the actual settling test now: sweeps the whole grabbed block rather
+  than one point, so a clean result would mean something (mapping
+  confirmed across the full range, not just one spot), and any fault
+  caught would show exactly where, distinguishable from a pure mapping
+  error by whether it lines up with the already-known bit-13 signature.
 - Add the tick/date-based elapsed-time display for burn-in runs.
 - Add exit-summary logging (final results only, no periodic writes,
   out of respect for the CF card).
