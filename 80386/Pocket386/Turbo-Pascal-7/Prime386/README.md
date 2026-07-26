@@ -1,202 +1,97 @@
-# Prime386
+# THE HITCHHIKER'S GUIDE TO A BROKEN SHIFT INSTRUCTION
 
-A "Prime95-like" CPU/memory stress test for the Pocket 386 (ALi M6117
-SoC, 386SX/40, no FPU, DOS 6.22, Turbo Pascal 7.0).
+*Being a true and largely unembellished account of how a homemade Mersenne prime test on a 40-megahertz pocket computer ended up debugging Borland International's own runtime library, decades after everyone involved in writing it had presumably moved on with their lives.*
 
-## Why
+> Looking for the short, factual version instead? See [TECHNICAL.md](TECHNICAL.md).
 
-Prime95 stress-tests a PC by running a computation with a known correct
-answer, repeatedly -- a single bit-flip from bad RAM or a flaky ALU
-produces a detectably wrong result rather than silently corrupting
-something unnoticed. It does this via the Lucas-Lehmer primality test
-for Mersenne primes, using FFT-based multiplication that leans on
-modern floating-point hardware.
+---
 
-The 386SX in the Pocket 386 has no FPU. Prime386 applies the same
-self-verifying principle -- known exponent in, known correct answer
-out -- using pure integer/bignum arithmetic instead.
+## IN THE BEGINNING
 
-## Two-mode design
+In the beginning, someone wanted to know whether a Pocket 386 could be trusted. This is, on the face of it, an entirely reasonable thing to want to know about a computer, and the standard approach, used by serious people, in serious labs, since roughly 1995, is to make the computer do a sum with a known correct answer, over and over, and see if it lies to you. Prime95 does this for a living. It is a large, well-funded, extensively peer-reviewed program that has been quietly proving Mersenne primes and simultaneously proving CPUs are not broken for nearly thirty years.
 
-- **CPU test**: Lucas-Lehmer, run against exponents p for which
-  `2^p - 1` is a *known* Mersenne prime (13, 17, 19, 31, 61). Any run
-  that doesn't end at s=0 indicates an ALU/arithmetic fault.
-- **Memory test** (not yet written -- planned next): an XMS-based scan
-  of extended memory using simple fill/read-back patterns (0xAA/0x55,
-  walking bit, address-in-address), separate from the CPU test since
-  the tiny bignum footprint here does essentially nothing to stress
-  RAM on its own. A proper march algorithm (to catch coupling faults,
-  not just stuck-at faults) is planned as a v2 once this v1 pattern
-  set is confirmed working.
+The Pocket 386 does not have an FPU. This is a bit like asking someone to run a marathon and then discovering, at the start line, that they are a fish. So a new plan was required: the same idea, square a number, reduce it, repeat, and see if the machine arrives at the answer mathematics has already agreed on, done entirely in integer arithmetic, by hand, in Turbo Pascal 7, a language whose defining historical achievement was making 640 kilobytes feel spacious.
 
-Menu-driven, two independent modes, with the ability to stop a running
-test and switch modes.
+This plan was, initially, executed responsibly. Every piece of logic was tested in Python first -- squaring, the Mersenne shift-and-add reduction trick, the whole Lucas-Lehmer loop, fuzzed against tens of thousands of random cases before a single line of actual Pascal was written. This is, by any reasonable standard, the correct way to build something. It did not save anyone from what was coming. Nothing could have.
 
-## Bignum design
+---
 
-- Base 2^16 (`Word`), little-endian limb arrays. `NLIMB=4` (64 bits),
-  sized for the largest test exponent (p=61); `NLIMB2=8` for squaring
-  results before reduction.
-- **Mersenne mod-reduction trick**: since `2^p == 1 (mod 2^p-1)`,
-  reducing a value modulo a Mersenne number is shifts-and-adds, not
-  true division -- split the value into high/low p-bit halves and add
-  them, repeating until it fits (2 iterations observed as the worst
-  case), then map the all-ones case (exactly `2^p-1`) to 0.
-- **Signed-`LongInt` risk**: squaring two `Word`s can reach
-  65535*65535 ~= 4.29 billion, which exceeds signed 32-bit's positive
-  range (~2.147 billion) but is still under 2^32. This is safe in TP7
-  specifically because (a) Pascal's `shr`/`shl` are logical shifts
-  regardless of sign, and (b) `$Q-` (no overflow-check trap) is the
-  compiler default.
+## THE FILE THAT ATE ITS OWN HEAD
 
-## Timing (for the memory-scan burn-in mode)
+The first real casualty was self-inflicted, and, in retrospect, a little poetic. Turbo Pascal's comments do not nest. Nobody tells you this until you've already written a lengthy, thoughtful header comment explaining a subtle point about the $Q- compiler directive, mentioning that literal directive text inside the comment, and thereby closing the comment several dozen lines earlier than intended, at which point the compiler, finding itself suddenly staring at prose instead of Pascal, did the only sensible thing: reported total, uncomprehending confusion at a BEGIN that, as far as it could tell, did not exist anywhere nearby. The file's own documentation had reached back and throttled it. This is not a metaphor. This is just what happened.
 
-Originally planned around the raw BIOS tick counter, with manual
-midnight-rollover detection (verified in Python against a simulated
-5-day burn-in with irregular polling). Switched to DOS's own
-`GetDate`/`GetTime` instead -- DOS's date-keeping already handles
-midnight rollover correctly (same underlying timer interrupt chain),
-so hand-rolled rollover logic isn't needed. The day-number
-linearization this requires was verified against Python's `datetime`
-across 100,000+ fuzzed date/time pairs spanning leap years and
-month/year boundaries.
+The fix was to switch to sparse "//" comments, a perfectly modern, perfectly reasonable choice, which worked beautifully right up until it was tested on the actual, physical Turbo Pascal 7 compiler, which, it turns out, does not recognize "//" as a comment at all, and greeted the very first one with the same blank incomprehension as before. The correct comment style, it emerged, could be independently verified by grep-ing a completely unrelated program that happened to already compile successfully, which contained, reassuringly, zero instances of "//" and fifty-nine instances of the old-style comments. Sometimes the universe leaves you a note. This was one of those times.
 
-That raised a real question before settling on it for good: could an
-RTC-level Daylight-Savings-Enable bit silently jump the clock by an
-hour mid-run, independent of DOS? (DOS 6.22 itself has no DST logic --
-that was a Windows Control Panel feature -- but the RTC hardware could,
-in principle, regardless of the OS.) Checked directly on the actual
-hardware via `DEBUG` (`O 70 0B` / `I 71`) rather than assuming: reads
-back `02`, meaning bit 0 (DSE) is 0 -- disabled. With that confirmed,
-`GetDate`/`GetTime`-based elapsed timing is safe on this machine, and
-is the final approach used -- no tick-counting fallback needed.
+---
 
-## Verification methodology
+## THE SHAPE-SHIFTING NUMBER
 
-Algorithmic logic was fuzz-tested in Python against ground truth before
-any Pascal was written:
-- Squaring: 20,000+ random cases vs. Python's native multiplication.
-- Mersenne mod-reduction: 34,000+ random cases across p=3..89
-  (including 16-bit-aligned and non-aligned p) vs. Python's `%`.
-- Full Lucas-Lehmer loop: checked against every exponent in the test
-  set, plus known-composite exponents (11, 23, 29, 37, 41, 53) to
-  confirm it correctly rejects non-Mersenne-primes too.
-- The exact Pascal code structure (not just the underlying algorithm)
-  was separately transliterated to Python and re-run against the same
-  known-answer set, to catch transcription bugs specifically.
+With the syntax sorted, the program ran. And it printed a wrong number. Specifically, a variable that could only ever legitimately be 13, 17, 19, 31, or 61, because those were the only five numbers it was ever asked to hold, printed 145.
 
-TP7-specific arithmetic semantics (shift direction, overflow-check
-default) were checked against actual Pascal language documentation,
-not assumed from general programming experience.
+This is the point at which any reasonable investigation should have taken considerably less time than it did. Adding a diagnostic line and recompiling produced 53 instead. A further diagnostic produced FORTY......(wait for it).....ONE. The bug was not merely wrong; it was creatively wrong, a different specific incorrect number depending, seemingly, on how hard you were looking at it, like a suspect who gives a different alibi to every detective in the rotation, and somehow makes each one sound completely plausible at the time.
 
-## Resolved: a bug in Turbo Pascal's own runtime library, not the hardware
+A first sanity check using Free Pascal, a completely different, independent compiler, ran the identical source and printed the right answer, every time, with the weary indifference of software that has never once considered lying to anyone. The same Turbo Pascal 7, run under DOSBox, (just politely emulated rather than run on physical silicon) also behaved impeccably, four separate times. The machine, it appeared, was only broken when nobody except the real, physical Pocket 386 was watching. This is not how computers are supposed to work. Computers are supposed to be reliably, boringly wrong, not selectively, theatrically wrong depending on the audience.
 
-*(For the long-form version of this story, see [THE-SHR16-SAGA.md](THE-SHR16-SAGA.md).)*
+---
 
-While bringing up the CPU-test core on real hardware, a diagnostic
-build (temporarily printing internal state inside `ModMersenneWords`)
-showed `p` -- a plain `Byte` parameter that should only ever be 13,
-17, 19, 31, or 61 -- reading as a garbage value partway through a
-run: 145 in one build, 53 in another, 41 in a third, each time
-internally self-consistent (the derived `fullWords`/`remBits` always
-matched the garbage `p` exactly) but never matching any actual
-test-set exponent.
+## A PARADE OF CONFIDENT ORACLES
 
-Cross-checked the identical source across three independent
-compilations:
-- **Free Pascal** (`fpc -Mtp`, native Linux target): compiled clean,
-  all five test cases pass, zero corruption.
-- **Real Turbo Pascal 7.0 under DOSBox** (the actual TP7 compiler,
-  emulated hardware): four separate runs, zero corruption, all five
-  tests pass every time.
-- **Real Turbo Pascal 7.0 on the physical Pocket 386**: corruption
-  reproduced reliably for a given build, but the specific wrong value
-  shifted whenever the surrounding code changed (145 -> 53 -> 41 across
-  three diagnostic revisions).
+Somewhere around here, an oracle was consulted, in the manner of travelers in ancient times consulting an oracle, and Gemini answered with the full, unwavering confidence oracles are contractually obligated to provide. It explained, at some length and with impressive-sounding citations, that the ALi M6117 chipset in the Pocket 386 almost certainly had a documented silicon erratum in its handling of carry flags during multi-word rotation, or possibly a stale segment descriptor cache confused by a tight loop, or possibly, and this was my personal favorite, that a timer interrupt was arriving mid-REP-MOVSW and corrupting the resume state, a bug so specific and confidently described it briefly felt rude not to believe it.
 
-The turning point: recompiling the identical source from scratch on a
-*second, physically different* Pocket 386 unit produced byte-for-byte
-identical wrong output to the first machine's most recent build. Two
-independent physical RAM chips producing the exact same "random"
-corruption isn't something bad hardware does -- that result is the
-signature of something fully deterministic, and ruled out a hardware
-fault as the cause.
+None of it was true. Every one of these explanations was expressed in real, correct, textbook-accurate computer science vocabulary, arranged into sentences that were, individually, almost entirely fictional. The oracle was not lying so much as improvising, extremely well, in a language it had clearly studied without ever having actually spoken to anyone who'd lived there. Which is, if you think about it, worse.
 
-An independent memory diagnostic (CheckIt) did separately confirm a
-real, unrelated extended-memory parity fault on the first unit (see
-below) -- a genuine hardware issue, just not the one causing this bug.
+---
 
-Turbo Debugger (once actually located -- it had been present the whole
-time) made the real cause visible directly: a loop counter (`k`) that
-should never exceed 7 was observed climbing past 130 in real time,
-because a `carry` variable held **16** at a point where hand-verified
-arithmetic said it should be exactly **0**. Disassembling the
-responsible line -- `carry := prod shr 16` -- showed it wasn't a shift
-instruction at all, but a far call into Turbo Pascal's own
-(unsymboled, precompiled) runtime library at `455C:08B8`. That routine
-appears to return the wrong 16-bit half of a 32-bit value on this
-specific compiler/hardware combination, for a plain 32-bit
-shift-by-16 -- an operation used constantly throughout the bignum code.
+## THE DETECTIVE WORK
 
-**The fix**: bypass the runtime call entirely using a variant record
-(`TLongWords`) to read a `LongInt`'s high word directly via memory
-layout instead of via `shr 16`. Verified bit-identical to the correct
-`shr 16` result across 20,000 random 32-bit values in Python, then
-confirmed on real hardware: a full run (all five test exponents,
-1,352 lines of diagnostic trace) came back completely clean, with
-every intermediate value matching hand-verified math from earlier in
-this investigation.
+What followed was a proper, old-fashioned hardware investigation, conducted with a .38 Colt, a fedora and the seriousness the situation deserved and, on reflection, rather more seriousness than a 30-year-old development system generally receives from anyone. A memory diagnostic was located (the almost correct one, there are, confusingly, two unrelated products both called "CheckIt," one of them a legitimate 1990 DOS utility and the other a modern Windows product with nothing whatsoever to offer a machine running DOS 6.22, discovered by the traditional method of nearly downloading the wrong one). There was a major problem with the CheckIt utility: it was in German. Not generally a product flaw, but rather serious as I don't speak German. Or more germane to the story, read German. Google redeemed itself with the translate app, though I'll still keep my hands on my wallet around Gemini. Despite the language barrier it found a real, confirmed, entirely unrelated hardware fault: extended memory, failing consistently, on the exact same low-order address offset, on the exact same bit, bit 3, every time. A bad chip if ever there was one. A bad chip in my cheap Ali-Express quality machine?! the horror.
 
-## Hardware finding, independent of the above (still worth knowing)
+This turned out to be a red herring of the highest order, because the actual bug lived in conventional memory, in the stack, an entirely different neighborhood the extended-memory fault had never even visited. Along the way: a German-language program requiring a hunt for an umlaut key that didn't physically exist (resolved, eventually, by Alt+5, on the Pocket 386, for reasons that remain philosophically unclear); a CF card swapped between two physical machines specifically to catch the bug red-handed relocating itself (yes, I own two Pocket 386s); a photograph of an actual RAM chip, squinted at for clues; a BIOS shadow-memory setting checked and found innocent; a GPCS0 chip-select window investigated and found to be nowhere near the scene of the crime.
 
-CheckIt (the real, period-appropriate DOS diagnostic, not the
-unrelated modern Windows product of the same name) found a genuine,
-reproducible extended-memory parity fault on the first Pocket 386
-unit -- consistently on bit 3, at addresses sharing an identical
-low-order offset (`xxx704h`), across dozens of hits in a full test
-pass. This is unrelated to the bug above (which lived in conventional
-memory, in the stack) but is a real, separate hardware issue on that
-specific unit, worth factoring in if that machine is used for
-anything that touches extended memory (Windows, XMS-using software).
-The second unit's quick CheckIt test came back clean; a full test on
-it, for a fair comparison, is still outstanding.
+And then, the moment that should have been the twist ending, and instead was just the beginning of the real mystery: the exact same source, recompiled fresh, on a second, physically different machine -- produced byte-for-byte identical wrong output. Not similar. Not "also broken." Identical, down to the bits.
 
-## Status
+Two separate, physically distinct lumps of 1990s architecture do not independently arrive at the same specific wrong answer by coincidence. Something else was going on, and it was not a bad chip. Though there was a bad chip, in the one machine.
 
-**Stage 1 of 2, complete and confirmed.** `PRIME386.PAS` contains the
-bignum/Lucas-Lehmer engine and a test harness running the known
-exponent set. Compiles and runs clean on the physical Pocket 386 --
-all five test cases pass, verified against a full diagnostic trace.
-No XMS module, menu, elapsed-time display, or exit-summary logging
-yet -- those are next.
+---
 
-## Next steps
+## ENTER THE TORCH-BEARER
 
-- Add the XMS extended-memory scanner module.
-- Add the tick/date-based elapsed-time display for burn-in runs.
-- Add the two-mode menu with stop/switch, and exit-summary logging
-  (final results only -- no periodic writes, out of respect for the
-  CF card).
-- v2: march-algorithm memory patterns, for coupling-fault coverage.
-- Optional: full CheckIt test on the second unit, for a fair
-  comparison against the first unit's confirmed extended-memory fault.
+Turbo Debugger. The one tool that had been sitting in a folder, unnoticed, the entire time, like a fire extinguisher nobody thought to check for until the kitchen was already smoking, was finally located and pressed into service. This was, in retrospect, the point at which the investigation stopped guessing and started simply looking.
 
-## Version history
+Live, in real time, a loop variable named "k" which had exactly one job, counting from 0 to 7 inside an 8-word array, was observed climbing. Past 7. Past 20. Past 100. It did not stop at 131 because it reached 131; it stopped at 131 because that's when someone looked away. With range checking switched off (as is, apparently, traditional), the program had simply never been told this was a problem, and so, being an obedient sort of program, it hadn't considered it one either, and had gone on cheerfully overwriting whatever memory happened to be nearby, one word at a time, forever, or at least until someone got bored of watching.
 
-- Initial CPU-test core written, verified in Python, and confirmed
-  syntactically clean after fixing a premature-comment-closure bug
-  found via a real compile attempt on hardware.
-- First real-hardware run surfaced unexplained corruption of a simple
-  parameter value. Ruled out the algorithm and the source (Python
-  re-verification, Free Pascal, and DOSBox-hosted real TP7 all run it
-  correctly) -- left open as a likely physical hardware fault pending
-  a same-binary test on the second unit.
-- Second unit produced byte-identical corruption to the first, ruling
-  out a hardware cause. Turbo Debugger traced the actual root cause to
-  Turbo Pascal's own runtime library returning the wrong half of a
-  32-bit value for `shr 16`. Fixed by bypassing the runtime call
-  entirely with a variant-record memory overlay (`TLongWords`/
-  `HiWord`). Confirmed clean: all five test exponents pass, full
-  diagnostic trace matches hand-verified arithmetic throughout. Stage
-  1 complete. See "Resolved" above, or
-  [THE-SHR16-SAGA.md](THE-SHR16-SAGA.md) for the full story.
+Upstream of that, in a much smaller, much quieter frame, sat the actual culprit: a variable called carry, holding the number 16, at a point in the program's life when every hand-verified calculation, done twice, independently, weeks apart, said it should hold 0. Not a subtle off-by-one. Not a rounding error. A clean, exact, entirely wrong 16, computed by a single line of source code doing something as mundane and unglamorous as shifting a number 16 places to the right.
+
+That line, once actually disassembled, turned out not to contain a shift instruction at all. It contained a polite, well-mannered function call, to a shared piece of Turbo Pascal's own runtime library, buried at address 455C:08B8, with no name, no source code, and, as it turned out, no willingness whatsoever to explain itself. Turbo Debugger could show the call being made. It could not show what happened inside it, because Borland, in 1992, had not anticipated that anyone would still be asking in 2026.
+
+---
+
+## THE ANTICLIMAX, WHICH WAS ALSO THE SOLUTION
+
+There is a version of this story where the runtime library gets disassembled byte by byte, its secret finally dragged into the light, its exact and specific failing understood in full. That would have been a very satisfying ending, and it remains, as far as anyone knows, entirely unwritten.
+
+Instead, the fix was to stop asking that particular function to do anything at all. Turbo Pascal, like most Pascals of its era, allows a program to declare that two completely different-looking variables occupy the exact same physical bytes in memory, a LongInt on one hand, and a pair of plain 16-bit words on the other, laid one after another, courtesy of nothing more mysterious than how x86 stores things in memory in the first place. Reading the high word of a 32-bit number, this way, requires no shift, no carry flag, and, crucially, no phone call to a stranger at 455C:08B8 who had clearly been giving out bad directions to at least one specific customer for over thirty years.
+
+It was recompiled. It was run. It produced thirteen hundred and fifty-two lines of output, every single one of them correct, matching, line for line, number for number, arithmetic that had been verified by hand weeks earlier, on paper, before any of this began.
+
+---
+
+## MORAL, IF ANY IS REQUIRED
+
+The bug was never in the hardware. The bug was never in the algorithm. The bug had been sitting, patiently, inside Turbo Pascal's own compiled runtime library since roughly the first Bush administration, waiting for someone to ask it to shift a 32-bit number by exactly 16 bits on this particular chip, in this particular way, and nobody had, in thirty years, happened to ask. Or at least they haven't made that shame public. Until a stress-test program built specifically to catch machines lying about arithmetic did exactly what it was built to do, it just caught the compiler's own toolbox lying, instead of the CPU.
+
+Which is, on balance, a much better story to have ended up with.
+
+---
+
+## ONE LAST THING
+
+It turns out the story does not actually end there, because someone, eventually, thought to check whether anyone else had ever run into this. Someone had. Borland had.
+
+Borland Pascal 7.0 -- the same 7.0, released in October of 1992 -- shipped with a genuine, documented, entirely real bug: the SHL and SHR instructions, for LongInt operands, with shift values between 16 and 31, were unreliable when run on a 386 or later processor. Not "possibly unreliable." Not "unreliable under specific conditions nobody has ever characterized." Unreliable, full stop, in exactly the way already described here, on exactly the kind of processor already described here. On some processors, it produced garbage. On some processors, it worked. Nobody, at the time, seems to have thought this needed shouting about.
+
+It was fixed five months later, in March of 1993, in a release Borland called 7.01, remembered today, by the small number of people who remember it at all, as a "silent maintenance release," which is a wonderfully corporate way of saying "we fixed it and mentioned it to almost nobody." The two versions can, in fact, be told apart by their file timestamps: 7.00 was compiled at 07:00. 7.01 was compiled at 07:01. Someone, somewhere, thought that was a good idea. In fairness, it was.
+
+So: thirty-three years. That is how long this specific bug has been sitting quietly in a piece of software, fixed, documented, entirely knowable, waiting for someone to need to know about it badly enough to go looking. A Pocket 386, several thousand miles and several decades removed from Borland's original engineers, turned out to be the thing that finally needed to know.
+
+Nobody involved was the last to find out. As it happens, everybody, this whole time, could simply have asked.
