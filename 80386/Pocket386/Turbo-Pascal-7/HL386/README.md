@@ -69,30 +69,33 @@ Elapsed time is tracked via the BIOS timer-tick counter rather than the
 system clock, since this machine's CMOS clock isn't reliable, see
 [Pocket 386](../../) for the shared hardware note on this.
 
-## Statistical analysis (seeds 1-936 sweep)
+## Statistical analysis (seeds 1-1504 sweep)
 
-![Mu distribution tail analysis](mu_tail_analysis_n936.png)
+![Mu distribution tail analysis](mu_tail_analysis_n1504.png)
 
-Across the full 936-seed combined sweep:
+Across the full 1,504-seed combined sweep:
 
 - **Mu is roughly log-normally distributed.** Mean and median of
   log(Mu) are nearly identical (7.26 vs 7.24), the signature of a
   right-skewed distribution that looks symmetric on a log scale. Raw
-  Mu ranges from 318 to 6037, with most seeds converging in the
+  Mu ranges from 318 to 7204, with most seeds converging in the
   500-2000 generation range and a long, thinning tail beyond that.
   This shape has held consistently since the very first checkpoint at
-  n=37, across six independent sample sizes along the way.
-- **Period 2 dominates overwhelmingly**: 929 of 936 seeds (99.3%)
-  settle into a period-2 oscillation. Seven seeds, 1, 26, 302, 446,
-  709, 811, and 827, land on period 6 instead; no other period has
-  appeared anywhere in the sweep so far.
-- **The Mu ceiling has held steady since seed 570.** Seed 482 is still
-  the slowest to converge in the entire sweep, at Mu=6037, 845
-  generations clear of the next-highest seed (550, at Mu=5192), and
-  nearly 3.8x the sweep's mean. That this ceiling hasn't moved across
-  the 366 additional seeds since the last checkpoint is itself decent
-  evidence the tail isn't a heavy one, though it's not proof nothing
-  bigger exists further out.
+  n=37, across seven independent sample sizes along the way.
+- **Period 2 dominates overwhelmingly**: 1493 of 1504 seeds (99.3%)
+  settle into a period-2 oscillation. Ten seeds, 1, 26, 302, 446, 709,
+  811, 827, 1216, 1286, and 1483, land on period 6 instead. One seed,
+  1239, is a genuinely new finding: period 30, the first period other
+  than 2 or 6 seen anywhere in the sweep. Its Mu (2236) is unremarkable,
+  right around the sweep's median, so the long period isn't associated
+  with slow convergence in this case.
+- **The Mu ceiling keeps climbing modestly, not explosively.** Seed
+  1148 is now the slowest to converge in the entire sweep, at
+  Mu=7204, 1167 generations clear of the next-highest seed (482, at
+  Mu=6037, itself the previous ceiling), and 4.5x the sweep's mean.
+  Each checkpoint so far has produced a new record eventually, but by
+  a shrinking margin relative to the growing sample, consistent with
+  a log-normal tail rather than a heavy one.
 
 ## Oscillating structures
 
@@ -143,7 +146,7 @@ convergence, and the real tick-based `MuSeconds` has been cross-checked
 against `HL386_Brent.pas`'s `Mu` and `Period` (which match exactly for
 the same seeds, as expected from a deterministic simulation). Beyond
 that: run continuously across two separate Pocket 386 units in parallel
-over several days, covering seeds 1-936 with zero gaps in the combined
+over several days, covering seeds 1-1504 with zero gaps in the combined
 log (one harmless duplicate pair turned up in the raw merge, identical
 in both readings, exactly as determinism predicts, and was removed),
 including multiple unattended stretches of 20+ hours each. One logging anomaly turned up early in this process
@@ -264,7 +267,7 @@ Last completed seed: 2
   starting point, the other from a high one) specifically to build
   confidence in long unattended runs faster, and to accumulate a larger
   dataset than a single machine could in the same time. The combined
-  result, as of the latest checkpoint: seeds 1-936, zero gaps. One
+  result, as of the latest checkpoint: seeds 1-1504, zero gaps. One
   duplicate pair (seeds 889 and 908, likely from a small overlap near a
   machine handoff) turned up in the raw merge; both readings were
   byte-for-byte identical, exactly what determinism guarantees rather
